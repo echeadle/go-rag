@@ -1,4 +1,4 @@
-# go_rag
+# go-rag
 
 Udemy Course setting up rag using go and postgres
 
