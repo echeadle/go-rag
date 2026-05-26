@@ -40,7 +40,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 
 	if store != nil {
 		defer store.Close()
-		logger.PrintF("vector store ready")
+		logger.Printf("vector store ready")
 	}
 
 	return chat.RunREPL(ctx, client, chat.Options{
@@ -52,11 +52,12 @@ func openStore(ctx context.Context,cfg config.Config) (vector.Store, error) {
 	if cfg.DatabaseURL == "" {
 		return nil, nil
 	}
-	s, err := pgvector.New(ctx, pgvector.Options {
-		DSN: cfg.DatabaseURL,
+	s, err := pgvector.New(ctx, pgvector.Options{
+		DSN:          cfg.DatabaseURL,
 		EmbeddingDim: cfg.EmbeddingDim,
 	})
 	if err != nil {
 		return nil, err
 	}
+	return s, nil
 }

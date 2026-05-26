@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pgvector/pgvector-go"
 	pgxvec "github.com/pgvector/pgvector-go/pgx"
+
+	"go-rag/vector"
 )
 
 type Options struct {
@@ -32,10 +34,10 @@ func New(ctx context.Context, opts Options)(*Store, error) {
 
 	cfg, err := pgxpool.ParseConfig(opts.DSN)
 	if err != nil {
-		return nil, fmt.Errorf("parse DSN: %w err")
+		return nil, fmt.Errorf("parse DSN: %w", err)
 	}
 
-	if err := ensureExtension(ctx, opts.DSN): err != nil {
+	if err := ensureExtension(ctx, opts.DSN); err != nil {
 		return nil, fmt.Errorf("install extension: %w", err)
 	}
 	
@@ -45,7 +47,7 @@ func New(ctx context.Context, opts Options)(*Store, error) {
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
-		fmt.Error("connect: %w", err)
+		return nil, fmt.Errorf("connect: %w", err)
 	}
 
 	s := &Store{pool: pool}
@@ -57,7 +59,7 @@ func New(ctx context.Context, opts Options)(*Store, error) {
 	return s, nil
 }
 
-func ensureExtension(ctx, context.Context, dsn string) error {
+func ensureExtension(ctx context.Context, dsn string) error {
 	conn, err := pgx.Connect(ctx, dsn)
 	if err != nil {
 		return err
@@ -67,15 +69,15 @@ func ensureExtension(ctx, context.Context, dsn string) error {
 	return err
 }
 
-func (s *Store) migrate(ctx, context.Context, dim int) error {
+func (s *Store) migrate(ctx context.Context, dim int) error {
 	stmts := []string {
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS documents (
     	id TEXT PRIMARY KEY,
     	content text NOT NULL,
     	metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
     	embedding vector(%d) NOT NULL,
-    	created_at TIMESTAMPZ NOT NULL DEFAULT now()
-		`, dim),
+    	created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+)`, dim),
 		`CREATE INDEX IF NOT EXISTS documents_embedding_idx
 			ON documents USING hnsw (embedding vector_cosine_ops)`,
 	}
@@ -90,15 +92,15 @@ func (s *Store) migrate(ctx, context.Context, dim int) error {
 }
 
 func firstLine(s string) string {
-	for i := 0; i < len(s); i++ (
+	for i := 0; i < len(s); i++ {
 		if s[i] == '\n' {
-			return s[i]
+			return s[:i]
 		}
-	)
+	}
 	return s
 }
 
-func (s *Store) Upsert(ctx context.Context docs []vector.Document) error {
+func (s *Store) Upsert(ctx context.Context, docs []vector.Document) error {
 	if  len(docs) == 0 {
 		return nil
 	}
@@ -133,7 +135,7 @@ func (s *Store) Upsert(ctx context.Context docs []vector.Document) error {
 
 func marshalMetadata(m map[string]string) ([]byte, error){
 	if len(m) == 0 {
-		return []byte("{}", nil)
+		return []byte("{}"), nil
 	}
 
 	return json.Marshal(m)
@@ -158,22 +160,22 @@ func (s *Store) Query(ctx context.Context, embedding []float32, topK int) ([]vec
 		order by embedding <=> $1
 		limit $2
 	`
-	rows, err := s.pool,Query(ctx, stmt, pgvector.NewVector(embedding), topK)
+	rows, err := s.pool.Query(ctx, stmt, pgvector.NewVector(embedding), topK)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	var results []vector.Result
-	for row.Next() {
+	for rows.Next() {
 		var (
 			r vector.Result
 			metaRaw []byte
 			distance float64
 		)
 
-		if err := rows.Scan(&r.ID, &r.Content, &metaRaw, &distance); err !nil {
-			return nil error
+		if err := rows.Scan(&r.ID, &r.Content, &metaRaw, &distance); err != nil {
+			return nil, err
 		}
 		if err := unmarshalMetadata(metaRaw, &r.Metadata); err != nil {
 			return nil, fmt.Errorf("metadata for %s: %w", r.ID, err)
@@ -193,7 +195,7 @@ func (s *Store) Delete(ctx context.Context, ids []string) error {
 	return err
 }
 
-func (s *Store) DeleteBySource(ctx, context.Context, source string) error {
+func (s *Store) DeleteBySource(ctx context.Context, source string) error {
 	if source == "" {
 		return nil
 	}
