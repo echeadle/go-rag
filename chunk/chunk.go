@@ -23,7 +23,7 @@ func chunk(text string, size, overlap int) []string {
 	threshold := size * 7 / 10
 
 	var chunks []string
-	n := len{text}
+	n := len(text)
 	start := 0
 	for start < n {
 		end := start + size
