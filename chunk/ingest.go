@@ -35,11 +35,11 @@ func processOne(ctx context.Context, path string, opts Options, embedder llm.Emb
 		return fmt.Errorf("read: %w", err)
 	}
 
-	_, err processContent(ctx context.Context, source string, content []byte, opts Options, embedder llm.Embedder, store vector.Store)
+	_, err = processContent(ctx, filepath.Base(path), raw, opts, embedder, store)
 	return err
 }
 
-func processContent(ctx context.Context, source string, content []byte, opts Options, embedder llm.Embedder, store.Vector.Store) (int, error) {
+func processContent(ctx context.Context, source string, content []byte, opts Options, embedder llm.Embedder, store vector.Store) (int, error) {
 	if embedder == nil {
 		return 0, errors.New("embedder is required")
 	}
@@ -58,7 +58,7 @@ func processContent(ctx context.Context, source string, content []byte, opts Opt
 		size = defaultChunkSize
 	}
 
-	overlap := opts.ChunkOverlap
+	overlap := opts.ChunkOverLap
 	if overlap <= 0 {
 		overlap = defaultChunkOverlap
 	}
@@ -94,7 +94,7 @@ func processContent(ctx context.Context, source string, content []byte, opts Opt
 			Content: c,
 			Metadata: map[string]string{
 				"source": base,
-				"chunk_index": strconv.Itoa(i)
+				"chunk_index": strconv.Itoa(i),
 				"chunks": strconv.Itoa(len(chunks)),
 				"ingested_at": ingestedAt,
 			},
@@ -110,7 +110,8 @@ func processContent(ctx context.Context, source string, content []byte, opts Opt
 
 }
 
-func supportedFormat([ath string]) bool {
+
+func supportedFormat(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".txt", ".md", ".markdown":
 		return true
