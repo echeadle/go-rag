@@ -60,21 +60,29 @@ type Client struct {
 	sdk openai.Client
 }
 
+func New(cfg config.Config) *Client {
+	return newClient(cfg, cfg.BaseURL, cfg.APIKey)
+}
+
+func NewEmbedder(cfg config.Config) *Client {
+	return newClient(cfg, cfg.EmbeddingBaseURL, cfg.EmbeddingAPIKey)
+}
+
 // New returns a Client bound to the supplied configuration. Non-empty
 // BaseURL and APIKey are forwarded to the SDK as explicit options;
 // empty values are skipped so the SDK falls back to its own env-var
 // defaults. APIKey in particular is skipped when empty because local
 // providers (Ollama, LM Studio) don't require auth and a "Bearer "
 // header with no token trips some servers.
-func New(cfg config.Config) *Client {
+func newClient(cfg config.Config, baseURL, apiKey string) *Client {
 	opts := []option.RequestOption{}
 
-	if cfg.BaseURL != "" {
-		opts = append(opts, option.WithBaseURL(cfg.BaseURL))
+	if baseURL != "" {
+		opts = append(opts, option.WithBaseURL(baseURL))
 	}
 
-	if cfg.APIKey != "" {
-		opts = append(opts, option.WithAPIKey(cfg.APIKey))
+	if apiKey != "" {
+		opts = append(opts, option.WithAPIKey(apiKey))
 	}
 
 	return &Client{cfg: cfg, sdk: openai.NewClient(opts...)}
@@ -130,3 +138,6 @@ func toSDKMessages(messages []Message) []openai.ChatCompletionMessageParamUnion 
 	}
 	return out
 }
+
+
+

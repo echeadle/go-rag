@@ -13,7 +13,9 @@ type Config struct {
 	Model			 string
 	SystemPromptFile string
 	DatabaseURL 	 string
-	EmbeddingDim	 int 	
+	EmbeddingDim	 int
+	EmbeddingBaseURL string
+	EmbeddingAPIKey  string	
 }
 
 func Load() Config {
@@ -26,6 +28,8 @@ func Load() Config {
 		SystemPromptFile: os.Getenv("SYSTEM_PROMPT_FILE"),
 		DatabaseURL: 	  os.Getenv("DATABASE_URL"),
 		EmbeddingDim:	  atoiOr(os.Getenv("EMBEDDING_DIM"), 0),
+		EmbeddingBaseURL: os.Getenv("EMBEDDING_BASE_URL"),
+		EmbeddingAPIKey:  os.Getenv("EMBEDDING_API_KEY"),
 	}
 	
 	if cfg.BaseURL == "" {
@@ -38,6 +42,13 @@ func Load() Config {
 
 	if cfg.EmbeddingDim == 0 {
 		cfg.EmbeddingDim = 768
+	}
+
+	if cfg.EmbeddingBaseURL == "" {
+		cfg.EmbeddingBaseURL = cfg.BaseURL
+		if cfg.EmbeddingAPIKey == "" {
+			cfg.EmbeddingAPIKey = cfg.APIKey
+		}
 	}
 
 	return cfg
