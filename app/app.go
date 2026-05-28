@@ -79,10 +79,15 @@ func Run(parent context.Context, cfg config.Config) error {
 		logger.Printf("vector store ready")
 	}
 
+	//get a retriever, which means we need a rewriter
 	var retriever *rag.Retriever
 	if store != nil {
-		retriever = rag.New(embedder, store, rag.Options{})
+		retriever = rag.New(embedder, store, rag.Options{
+			TopK: 5,
+			Rewriter: rag.NewRewriter(client),
+		})
 	}
+
 
 	replErr := chat.RunREPL(ctx, client, retriever, chat.Options{
 		SystemPromptFile: cfg.SystemPromptFile,

@@ -7,10 +7,6 @@ import (
 	"strings"
 )
 
-type Rewriter struct {
-	client *llm.Client
-}
-
 const rewriteSystemPrompt = `You rewrite the user's lastest message into a standalone search query.
 
 Given the conversation, output a single search query that:
@@ -21,6 +17,14 @@ Given the conversation, output a single search query that:
 If the latest user message already stands on it's own with no references to prior turns, output it verbatim.
 
 Output only the quer, No preamble, no quotes, no explanation.`
+
+type Rewriter struct {
+	client *llm.Client
+}
+
+func NewRewriter(client *llm.Client) *Rewriter {
+	return &Rewriter{client: client}
+}
 
 func (r *Rewriter) Rewrite(ctx context.Context, history []llm.Message) (string, error) {
 	last := lastUserMessage(history)
