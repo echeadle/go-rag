@@ -62,6 +62,10 @@ func RunREPL(ctx context.Context, client *llm.Client, retriever *rag.Retriever ,
 			}
 		}
 
+		if len(turn) > 0 {
+			fmt.Fprintf(os.Stderr, "Final Prompt:\n\n%s\n", turn[len(turn)-1].Content)
+		}
+
 		reply, err := client.ChatStream(ctx, turn, func(s string) {
 			stopOnce.Do(spin.Stop)
 			fmt.Print(s)
