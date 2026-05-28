@@ -61,10 +61,11 @@ func RunREPL(ctx context.Context, client *llm.Client, retriever *rag.Retriever ,
 				turn = withInlineContext(history, contextText)
 			}
 		}
-
-		if len(turn) > 0 {
-			fmt.Fprintf(os.Stderr, "Final Prompt:\n\n%s\n", turn[len(turn)-1].Content)
-		}
+		// I am going to comment these three lines out.
+		// In the future we will add a debug flag
+		// if len(turn) > 0 {
+		// 	fmt.Fprintf(os.Stderr, "Final Prompt:\n\n%s\n", turn[len(turn)-1].Content)
+		// }
 
 		reply, err := client.ChatStream(ctx, turn, func(s string) {
 			stopOnce.Do(spin.Stop)
