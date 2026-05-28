@@ -20,6 +20,7 @@ import (
 	"go-rag/config"
 	"go-rag/ingest"
 	"go-rag/llm"
+	"go-rag/rag"
 	"go-rag/vector"
 	"go-rag/vector/pgvector"
 	"log"
@@ -78,7 +79,12 @@ func Run(parent context.Context, cfg config.Config) error {
 		logger.Printf("vector store ready")
 	}
 
-	replErr := chat.RunREPL(ctx, client, chat.Options{
+	var retriever *rag.Retriever
+	if store != nil {
+		retriever = rag.New(embedder, store, rag.Options{})
+	}
+
+	replErr := chat.RunREPL(ctx, client, retriever, chat.Options{
 		SystemPromptFile: cfg.SystemPromptFile,
 	})
 
