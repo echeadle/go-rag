@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-
 const (
 	defaultChunkSize    = 1000
 	defaultChunkOverlap = 100
@@ -35,11 +34,11 @@ func processOne(ctx context.Context, path string, opts Options, embedder llm.Emb
 		return fmt.Errorf("read: %w", err)
 	}
 
-	_, err = processContent(ctx, filepath.Base(path), raw, opts, embedder, store)
+	_, err = ProcessContent(ctx, filepath.Base(path), raw, opts, embedder, store)
 	return err
 }
 
-func processContent(ctx context.Context, source string, content []byte, opts Options, embedder llm.Embedder, store vector.Store) (int, error) {
+func ProcessContent(ctx context.Context, source string, content []byte, opts Options, embedder llm.Embedder, store vector.Store) (int, error) {
 	if embedder == nil {
 		return 0, errors.New("embedder is required")
 	}
@@ -50,7 +49,7 @@ func processContent(ctx context.Context, source string, content []byte, opts Opt
 
 	base := filepath.Base(source)
 	if !supportedFormat(base) {
-		return 0, fmt.Errorf("unsupported format %s", filepath.Ext(base)) 
+		return 0, fmt.Errorf("unsupported format %s", filepath.Ext(base))
 	}
 
 	size := opts.ChunksSize
@@ -90,19 +89,19 @@ func processContent(ctx context.Context, source string, content []byte, opts Opt
 	docs := make([]vector.Document, len(chunks))
 	for i, c := range chunks {
 		docs[i] = vector.Document{
-			ID: fmt.Sprintf("%s#%d", base, i),
+			ID:      fmt.Sprintf("%s#%d", base, i),
 			Content: c,
 			Metadata: map[string]string{
-				"source": base,
+				"source":      base,
 				"chunk_index": strconv.Itoa(i),
-				"chunks": strconv.Itoa(len(chunks)),
+				"chunks":      strconv.Itoa(len(chunks)),
 				"ingested_at": ingestedAt,
 			},
 			Embedding: vectors[i],
 		}
 	}
 
-	if err := store.Upsert(ctx, docs); err !=nil {
+	if err := store.Upsert(ctx, docs); err != nil {
 		return 0, err
 	}
 
@@ -110,6 +109,9 @@ func processContent(ctx context.Context, source string, content []byte, opts Opt
 
 }
 
+func IsSupported(name string) bool {
+	return supportedFormat(name)
+}
 
 func supportedFormat(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
