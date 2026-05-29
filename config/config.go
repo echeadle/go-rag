@@ -10,15 +10,19 @@ import (
 type Config struct {
 	BaseURL          string
 	APIKey           string
-	Model			 string
+	Model            string
 	SystemPromptFile string
-	DatabaseURL 	 string
-	EmbeddingDim	 int
+	DatabaseURL      string
+	EmbeddingDim     int
 	EmbeddingBaseURL string
 	EmbeddingAPIKey  string
-	EmbeddingModel	 string
-	IngestDir		 string
-	ProcessedDir	 string
+	EmbeddingModel   string
+	IngestDir        string
+	ProcessedDir     string
+
+	HTTPAddr    string
+	ImageDir    string
+	VisionModel string
 }
 
 func Load() Config {
@@ -29,19 +33,22 @@ func Load() Config {
 		APIKey:           os.Getenv("OPENAI_API_KEY"),
 		Model:            os.Getenv("OPENAI_MODEL"),
 		SystemPromptFile: os.Getenv("SYSTEM_PROMPT_FILE"),
-		DatabaseURL: 	  os.Getenv("DATABASE_URL"),
-		EmbeddingDim:	  atoiOr(os.Getenv("EMBEDDING_DIM"), 0),
+		DatabaseURL:      os.Getenv("DATABASE_URL"),
+		EmbeddingDim:     atoiOr(os.Getenv("EMBEDDING_DIM"), 0),
 		EmbeddingBaseURL: os.Getenv("EMBEDDING_BASE_URL"),
 		EmbeddingAPIKey:  os.Getenv("EMBEDDING_API_KEY"),
 		EmbeddingModel:   os.Getenv("EMBEDDING_MODEL"),
 		IngestDir:        os.Getenv("INGEST_DIR"),
 		ProcessedDir:     os.Getenv("PROCESSED_DIR"),
+		HTTPAddr:         os.Getenv("HTTP_ADDR"),
+		ImageDir:         os.Getenv("IMAGES_DIR"),
+		VisionModel:      os.Getenv("VISION_MODEL"),
 	}
-	
+
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com/v1"
 	}
-	
+
 	if cfg.Model == "" {
 		cfg.Model = "gpt-4o-mini"
 	}
@@ -67,6 +74,10 @@ func Load() Config {
 
 	if cfg.ProcessedDir == "" {
 		cfg.ProcessedDir = "./documents/processed"
+	}
+
+	if cfg.ImageDir == "" {
+		cfg.ImageDir = "./documents/images"
 	}
 
 	return cfg
