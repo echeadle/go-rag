@@ -86,7 +86,10 @@ func (s *Server) Routes() http.Handler {
 	r.Get("/chat", s.handleChatPage)
 	r.Post("/api/chat/stream", s.handleChatStream)
 	r.Post("/api/upload", s.handleUpload)
-
+	if s.imagesDir != "" {
+		r.Post("/api/upload/image", s.handleUploadImage)
+		fs := http.FileServer(http.Dir(s.imagesDir))
+	}
 	return r
 }
 

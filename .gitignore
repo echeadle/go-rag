@@ -32,6 +32,6 @@ zipfiles/
 documents/
 # Editor/IDE
 # .idea/
-# .vscode/
+.vscode/
 resume.txt
 
