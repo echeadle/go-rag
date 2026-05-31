@@ -21,8 +21,8 @@ const (
 type Options struct {
 	SourceDir    string
 	ProcessedDir string
-	ChunksSize   int
-	ChunkOverLap int
+	ChunkSize   int
+	ChunkOverlap int
 }
 
 func processOne(ctx context.Context, path string, opts Options, embedder llm.Embedder, store vector.Store) error {
@@ -52,12 +52,12 @@ func ProcessContent(ctx context.Context, source string, content []byte, opts Opt
 		return 0, fmt.Errorf("unsupported format %s", filepath.Ext(base))
 	}
 
-	size := opts.ChunksSize
+	size := opts.ChunkSize
 	if size <= 0 {
 		size = defaultChunkSize
 	}
 
-	overlap := opts.ChunkOverLap
+	overlap := opts.ChunkOverlap
 	if overlap <= 0 {
 		overlap = defaultChunkOverlap
 	}
