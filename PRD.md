@@ -177,6 +177,91 @@ pipeline, so you can see exactly where latency is coming from.
 
 ---
 
+### 11. PDF Ingestion
+
+**Current state:** The ingest pipeline supports `.txt` and `.md`/`.markdown` only. PDF is
+the most common format for real-world knowledge bases — manuals, papers, reports, etc.
+
+**What's needed:**
+- A pure-Go PDF text extraction library — `github.com/ledongthuc/pdf` requires no external
+  tools and handles most text-based PDFs
+- Update `IsSupported()` in `ingest/ingest.go` to include `.pdf`
+- Add a `extractPDF(data []byte) (string, error)` function and route `.pdf` files through
+  it before chunking in `ProcessContent`
+- Tests: known-good PDF → extracted text contains expected strings; corrupted/empty PDF → error
+
+**Note:** Image-only (scanned) PDFs produce no extractable text. Those documents belong in
+the image pipeline — upload as an image, caption it with the vision model, then ingest the
+caption. The extractor should return a clear error (not empty string) for image-only PDFs
+so the caller can surface a useful message.
+
+---
+
+### 12. Semantic Chunking
+
+**Current state:** Documents are split at fixed character boundaries (`ChunkSize`, `Overlap`
+in `ingest.Options`). This can cut sentences or paragraphs mid-thought, which degrades
+retrieval quality when the meaningful unit spans a chunk boundary.
+
+**What's needed:**
+- Replace fixed-size splitting with a topic-boundary detector: embed adjacent sentences,
+  compute cosine similarity between consecutive pairs — a sharp similarity drop signals a
+  topic shift, chunk there
+- Fall back to the current fixed chunker when the document is too short, has no sentence
+  boundaries, or the embedder is unavailable
+- Tests: document with clear topic shifts produces chunks that don't split mid-topic;
+  short document → single chunk; embedder error → falls back to fixed chunking
+
+**Key tradeoff:** Semantic chunking makes ingest slower and more expensive — it requires
+one embedding call per sentence rather than none. The payoff is chunks that align with
+topic boundaries, which significantly improves how well retrieval finds relevant content.
+Implement PDF ingestion first; chunking quality matters more once you have richer documents.
+
+---
+
+### 13. Hybrid Search
+
+**Current state:** Retrieval uses pure vector similarity (cosine distance via pgvector).
+This works well for semantically-phrased queries but can miss results for exact terms —
+names, codes, specific product identifiers, abbreviations.
+
+**What's needed:**
+- Add a `tsvector` column to the embeddings table (requires a DB migration — item 7 first)
+- At query time, run both a pgvector similarity search and a PostgreSQL `ts_query` keyword
+  search, then merge the two result sets using Reciprocal Rank Fusion (RRF) — a simple
+  algorithm that combines ranked lists without needing to tune score weights
+- `vector/pgvector` needs a `HybridQuery` method alongside the existing `Query`
+- Tests: query with a proper name that doesn't embed similarly → found by keyword path;
+  semantic query → found by vector path; both paths return the same document → deduplicated
+
+**Key tradeoff:** Adds schema complexity (migration, new column) and query complexity, but
+meaningfully improves recall for mixed natural-language + exact-term queries. Do semantic
+chunking first — better chunks raise the quality ceiling that hybrid search then exploits.
+
+---
+
+### 14. Reranking
+
+**Current state:** Retrieved chunks are returned in order of vector similarity score (or
+RRF score, once hybrid search is in place). That score is a decent but imperfect proxy
+for relevance to the user's exact question.
+
+**What's needed:**
+- After initial retrieval (`TopK` results), run a cross-encoder reranker model that scores
+  each (query, chunk) pair together — far more accurate than embedding similarity alone
+- Re-sort chunks by reranker score; pass only the top N (typically 3–5) to the LLM
+- Model options: `cross-encoder/ms-marco-MiniLM-L-6-v2` via a local Ollama endpoint, or a
+  hosted reranking API (Cohere Rerank, Jina Reranker)
+- Tests: reranker re-orders a known mis-ranked retrieval result into the correct order;
+  reranker unavailable → falls back to original retrieval order with a logged warning
+
+**Key tradeoff:** Adds latency (one model call per retrieved chunk) and potential cost if
+using a hosted API. This is the final layer of retrieval quality polish — do semantic
+chunking and hybrid search first. With good chunks and good recall, reranking is the
+difference between "usually right" and "consistently right."
+
+---
+
 ## Recommended Order of Work
 
 | Priority | Item | Why first |
@@ -191,6 +276,10 @@ pipeline, so you can see exactly where latency is coming from.
 | 8 | Metrics | Once running, know what it's doing |
 | 9 | API versioning + docs | Before anyone else integrates with it |
 | 10 | Frontend hardening | Backend must be solid first |
+| 11 | PDF ingestion | Expands what the knowledge base can ingest |
+| 12 | Semantic chunking | Biggest single improvement to retrieval quality |
+| 13 | Hybrid search | Improves recall for exact-term queries; needs item 7 first |
+| 14 | Reranking | Final retrieval polish; most impactful once 12 and 13 are done |
 
 ---
 
