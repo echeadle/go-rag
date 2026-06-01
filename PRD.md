@@ -112,14 +112,55 @@ when something actually tries to use the missing value.
 
 **Current state:** No container, no deployment config.
 
-**What's needed (minimum):**
-- Multi-stage `Dockerfile`: `golang:1.26-alpine` to build, `alpine` to run
-- `.dockerignore` to exclude `zipfiles/`, `.env`, `documents/`
-- `docker-compose.yml` that spins up the app + PostgreSQL + pgvector together
-- Health check endpoint (`GET /healthz`) that returns 200 if the DB is reachable
+**Goal:** Build toward a production-grade container step by step — not just a quick
+spin-up. Each step is verified before moving to the next. Security is not an afterthought
+added at the end; it is layered in progressively so each decision is understood.
 
-**Nice to have:**
-- GitHub Actions CI: `go build`, `go vet`, `go test ./...` on every push
+**Step 1 — Working multi-stage build:**
+- Build stage: `golang:1.26-alpine` — compiles the binary with CGO disabled (`CGO_ENABLED=0`)
+  so the output is a fully static binary with no libc dependency
+- Runtime stage: `alpine:3.21` — small but has a shell and package manager for debugging
+- `.dockerignore` to keep secrets and large dirs out of the build context:
+  `zipfiles/`, `.env`, `documents/`, `.git/`
+- Verify: `docker build` succeeds and `docker run` starts the app
+
+**Step 2 — Health check endpoint + docker-compose:**
+- Add `GET /healthz` route that pings the DB and returns 200/503
+- `docker-compose.yml` wiring app + `pgvector/pgvector:pg16` together
+- Compose passes env vars via an `.env` file (gitignored); no secrets in the image
+- Verify: `docker compose up` starts both services; `/healthz` returns 200
+
+**Step 3 — Non-root user (first security layer):**
+- Add a dedicated `appuser` in the Dockerfile (`adduser -D -u 1001 appuser`)
+- Switch to that user before `CMD` — process no longer runs as root inside the container
+- Verify: `docker exec` confirms `whoami` returns `appuser`, not `root`
+
+**Step 4 — Minimal attack surface:**
+- Switch runtime base from `alpine` to `gcr.io/distroless/static-debian12` — no shell,
+  no package manager, no utilities an attacker could use
+- Only the compiled binary and the embedded templates exist in the image
+- Verify: `docker run --entrypoint sh` fails (no shell — that's the point)
+
+**Step 5 — Harden the runtime flags:**
+- In docker-compose, add per-service security options:
+  - `read_only: true` — filesystem is read-only; app can only write to explicitly mounted volumes
+  - `security_opt: [no-new-privileges:true]` — process cannot gain elevated privileges via setuid
+  - `cap_drop: [ALL]` — drop all Linux capabilities; add back only what's needed (likely none)
+- Verify: app starts and operates normally with all restrictions in place
+
+**Step 6 — Network isolation:**
+- Define an explicit bridge network in docker-compose; do not use the default network
+- The app container can reach the database; the database is not exposed to the host
+- The app's HTTP port is the only thing published to the host
+- Verify: `docker network ls` shows a named network; DB port is not reachable from host
+
+**Step 7 — Image vulnerability scan:**
+- Run `docker scout cves` (or `trivy image`) against the built image
+- Fix any HIGH/CRITICAL CVEs by updating base image versions or dependencies
+- Document the scan result so there is a baseline to compare future builds against
+
+**Nice to have (after the above):**
+- GitHub Actions CI: `go build`, `go vet`, `go test ./...` + Trivy scan on every push
 - Automatic image build and push to a registry on merge to main
 
 ---

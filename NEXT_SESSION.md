@@ -12,18 +12,25 @@ We are productionizing the go-rag project using PRD.md as the guide.
 - PRD item 3: config validation — `config.Validate()` catches bad EMBEDDING_DIM; DATABASE_URL set + unreachable is now fatal (commit 16f17e6)
 - PRD items 11–14 added to PRD.md: PDF ingestion, semantic chunking, hybrid search, reranking (commit 37c7bce)
 
-**Next: PRD item 4 — Dockerfile + docker-compose**
+**Next: PRD item 4 — Dockerfile + docker-compose (production-grade, step by step)**
 
-From PRD.md, what's needed:
-- Multi-stage `Dockerfile`: `golang:1.26-alpine` to build, `alpine` to run
-- `.dockerignore` to exclude `zipfiles/`, `.env`, `documents/`
-- `docker-compose.yml` that spins up the app + PostgreSQL + pgvector together
-- Health check endpoint (`GET /healthz`) that returns 200 if the DB is reachable
+The goal is NOT a quick spin-up. We are building toward a fully hardened production
+container, one verified step at a time. Ed wants to understand each layer — don't jump
+ahead. The steps are defined in PRD.md section 6:
+
+- Step 1: Working multi-stage build (golang:1.26-alpine → alpine runtime), .dockerignore
+- Step 2: /healthz endpoint + docker-compose (app + pgvector/pgvector:pg16)
+- Step 3: Non-root user inside the container
+- Step 4: Distroless runtime image (no shell, minimal attack surface)
+- Step 5: Hardened runtime flags (read_only, no-new-privileges, cap_drop ALL)
+- Step 6: Network isolation (named bridge network, DB not exposed to host)
+- Step 7: Image vulnerability scan (docker scout or trivy)
+
+Complete and verify each step before moving to the next. Explain what each security
+measure does and why it matters — this is a learning exercise as much as a build task.
 
 **Working conventions:**
-- Always create a feature branch before starting: `git checkout -b feature/dockerfile`
+- Create a feature branch first: `git checkout -b feature/dockerfile`
 - Merge to main only after running the app and confirming it works
-- Read PRD.md at session start to confirm position before writing any code
+- Read PRD.md section 6 at session start before writing any files
 - Use the advisor before committing to an approach on multi-file changes
-
-Start by reading PRD.md to confirm position, then create the feature branch and plan the implementation before touching any files.
