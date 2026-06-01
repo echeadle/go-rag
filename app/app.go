@@ -16,6 +16,7 @@ package app
 // the foreground loop.
 import (
 	"context"
+	"fmt"
 	"go-rag/chat"
 	"go-rag/config"
 	"go-rag/ingest"
@@ -43,14 +44,13 @@ func Run(parent context.Context, cfg config.Config) error {
 
 	embedder := llm.NewEmbedder(cfg)
 
-	// Open the vector store. A nil store with a
-	// nil error means "no DATABASE_URL configured" — the chat path
-	// works fine without a database, so we surface the reason and
-	// keep going. Any real error (bad DSN, server unreachable,
-	// migration failure) is also logged but not fatal.
+	// Open the vector store. A nil store with a nil error means
+	// "no DATABASE_URL configured" — chat-only mode, intentional.
+	// Any real error (bad DSN, server unreachable, migration failure)
+	// is fatal: if DATABASE_URL is set, a broken store is not recoverable.
 	store, err := openStore(ctx, cfg)
 	if err != nil {
-		logger.Error("vector store disabled", slog.Any("error", err))
+		return fmt.Errorf("vector store: %w", err)
 	}
 
 	ingestLogger := logger.With(slog.String("component", "ingest"))

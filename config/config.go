@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 
@@ -81,6 +82,15 @@ func Load() Config {
 	}
 
 	return cfg
+}
+
+// Validate checks that cfg contains sensible values. Call it after Load()
+// and before starting any goroutines so bad config exits early with a clear message.
+func Validate(cfg Config) error {
+	if cfg.EmbeddingDim <= 0 {
+		return fmt.Errorf("EMBEDDING_DIM must be greater than zero, got %d", cfg.EmbeddingDim)
+	}
+	return nil
 }
 
 func atoiOr(s string, fallback int) int {

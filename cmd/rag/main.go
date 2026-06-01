@@ -20,8 +20,14 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := app.Run(ctx, config.Load()); err != nil {
-		fmt.Fprintln(os.Stderr,err)
+	cfg := config.Load()
+	if err := config.Validate(cfg); err != nil {
+		fmt.Fprintln(os.Stderr, "config error:", err)
+		os.Exit(1)
+	}
+
+	if err := app.Run(ctx, cfg); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
