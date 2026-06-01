@@ -22,7 +22,9 @@ package llm
 import (
 	"context"
 	"go-rag/config"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -76,6 +78,13 @@ func NewEmbedder(cfg config.Config) *Client {
 // header with no token trips some servers.
 func newClient(cfg config.Config, baseURL, apiKey string) *Client {
 	opts := []option.RequestOption{}
+
+	// The SDK default is 10 minutes. Local vision models (Ollama) need
+	// time to load into memory before sending the first response header,
+	// so bump it to 30 minutes on slow hardware.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = 30 * time.Minute
+	opts = append(opts, option.WithHTTPClient(&http.Client{Transport: transport}))
 
 	if baseURL != "" {
 		opts = append(opts, option.WithBaseURL(baseURL))
