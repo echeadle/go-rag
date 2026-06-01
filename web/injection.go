@@ -32,7 +32,7 @@ var injectionPatterns = []*regexp.Regexp{
 	// Reveal-the-prompt attacks
 	regexp.MustCompile(`(?i)\breveal\s+(?:your\s+|the\s+)?(?:system\s+)?(?:prompt|instructions|directives)`),
 	regexp.MustCompile(`(?i)\b(?:what|show|tell\s+me)\s+(?:are|were|is|me)?\s*(?:your|the)?\s*(?:system\s+)?(?:prompt|instructions|directives)\b`),
-	regexp.MustCompile(`(?i)\b(?:print|output|repeat|echo|show)\s+(?:everything\s+|all\s+(?:of\s+)?|me\s+|verbatim\s+)?(?:above|prior|previous|your\s+(?:system\s+)?(?:prompt|instructions))`),
+	regexp.MustCompile(`(?i)\b(?:print|output|repeat|echo|show)\s+(?:everything\s+|all\s+(?:of\s+)?|me\s+|verbatim\s+)?(?:above|prior|previous|your\s+(?:\w+\s+)*(?:system\s+)?(?:prompt|instructions))`),
 	// Safety-bypass language
 	regexp.MustCompile(`(?i)\b(?:override|bypass|circumvent|disable|turn\s+off)\s+(?:your\s+|the\s+|all\s+)?(?:safety|guardrails|restrictions|filters|content\s+policy|safeguards)`),
 	// ChatML / role-tag smuggling. Local templates that honor these
