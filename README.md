@@ -72,3 +72,66 @@ Phases listed in priority order. Complete each phase and verify it works before 
 - **Hybrid search** — combine cosine similarity with keyword search using PostgreSQL `tsvector`
 - **Semantic chunking** — use embedding similarity between adjacent sentences to find topic-shift boundaries instead of structural markers
 - **Agentic RAG** — let the LLM decide when to retrieve, what to search for, and how many retrieval rounds are needed
+
+---
+
+## Logging
+
+The application uses Go's built-in `log/slog` (structured logging, available since Go 1.21).
+All log output goes to **stderr** — it appears in the terminal but is not written to disk by default.
+
+### What the output looks like
+
+Each log line is a timestamp followed by `key=value` pairs:
+
+```
+time=2024-01-15T10:23:45.123Z level=INFO  msg="vector store ready"
+time=2024-01-15T10:23:45.124Z level=INFO  msg="watching dir for documents" dir=./documents
+time=2024-01-15T10:23:45.125Z level=INFO  msg="web chat available" addr=:8080
+time=2024-01-15T10:23:46.001Z level=INFO  msg="request" component=web method=GET path=/chat status=200 duration=1.2ms
+time=2024-01-15T10:23:50.772Z level=WARN  msg="injection blocked" component=web pattern="(?i)\\bignore..." route=/api/chat/stream
+time=2024-01-15T10:24:01.003Z level=ERROR msg="upload ingest failed" component=web file=notes.txt error="unsupported format"
+```
+
+The `component` field tells you which part of the app produced the line (`web` or `ingest`).
+
+### Log levels
+
+| Level | Used for |
+|---|---|
+| `INFO` | Normal events: startup status, HTTP requests |
+| `WARN` | Blocked prompt injection attempts — security-relevant, always worth reviewing |
+| `ERROR` | Failures: ingest errors, caption errors, template errors |
+
+### Why stderr and not stdout?
+
+The chat REPL and the web server's streaming responses use stdout. Writing logs to stderr keeps
+them on a separate stream so log lines never interrupt or corrupt the chat output. On your
+terminal the two streams appear mixed together, but they stay independent — a script or tool
+that reads stdout won't accidentally receive log lines.
+
+### Saving logs to disk
+
+Standard shell redirection works since logs are just stderr:
+
+```bash
+# Overwrite log file each run
+go run ./cmd/rag/ 2>app.log
+
+# Append across runs (keeps history)
+go run ./cmd/rag/ 2>>app.log
+
+# See logs in the terminal AND save to a file at the same time
+go run ./cmd/rag/ 2>&1 | tee app.log
+```
+
+### Logs in production
+
+When running as a background service or inside a container, redirect stderr to your log
+collector. The structured `key=value` format is directly compatible with Grafana Loki,
+Datadog, and CloudWatch — each field is individually searchable and filterable.
+
+```bash
+# Docker example: merge stderr into stdout for the container log driver to capture
+docker run ... 2>&1
+```
