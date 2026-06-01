@@ -13,7 +13,7 @@ import (
 	"html/template"
 	"io"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -42,6 +42,7 @@ type Options struct {
 	Store            vector.Store
 	ProcessedDir     string
 	ImagesDir        string
+	Logger           *slog.Logger
 }
 
 type Server struct {
@@ -54,6 +55,7 @@ type Server struct {
 	tpl          *template.Template
 	system       string
 	title        string
+	logger       *slog.Logger
 }
 
 func New(client, embedder *llm.Client, retriever *rag.Retriever, opts Options) (*Server, error) {
@@ -67,6 +69,10 @@ func New(client, embedder *llm.Client, retriever *rag.Retriever, opts Options) (
 		title = "RAG Chat"
 	}
 
+	lg := opts.Logger
+	if lg == nil {
+		lg = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
 	return &Server{
 		client:       client,
 		embedder:     embedder,
@@ -77,16 +83,18 @@ func New(client, embedder *llm.Client, retriever *rag.Retriever, opts Options) (
 		tpl:          tpl,
 		system:       readSystemPrompt(opts.SystemPromptFile),
 		title:        title,
+		logger:       lg,
 	}, nil
 }
 
 func (s *Server) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
+	r.Use(requestLogger(s.logger))
 	r.Get("/chat", s.handleChatPage)
 
 	r.Group(func(r chi.Router) {
-		r.Use(InjectionDefense)
+		r.Use(InjectionDefense(s.logger))
 		r.Post("/api/chat/stream", s.handleChatStream)
 		r.Post("/api/upload", s.handleUpload)
 		if s.imagesDir != "" {
@@ -136,7 +144,7 @@ func (s *Server) handleCaption(w http.ResponseWriter, r *http.Request) {
 	mime := header.Header.Get("Content-Type")
 	desc, err := s.client.DescribeImage(r.Context(), mime, content)
 	if err != nil {
-		log.Printf("[web] caption failed for %q: %v", header.Filename, err)
+		s.logger.Error("caption failed", slog.String("file", header.Filename), slog.Any("error", err))
 		http.Error(w, "caption failed", http.StatusBadGateway)
 		return
 	}
@@ -211,7 +219,7 @@ func (s *Server) handleUploadImage(w http.ResponseWriter, r *http.Request) {
 	chunks, err := ingest.ProcessImage(r.Context(), saved, description, ingest.Options{}, s.embedder, s.store)
 	if err != nil {
 		_ = os.Remove(dest)
-		log.Printf("[web] image ingest failed for %q: %v", saved, err)
+		s.logger.Error("image ingest failed", slog.String("file", saved), slog.Any("error", err))
 		http.Error(w, "ingest failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -285,7 +293,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	chunks, err := ingest.ProcessContent(r.Context(), name, content, ingest.Options{}, s.embedder, s.store)
 	if err != nil {
-		log.Printf("[web] upload ingest failed for %q: %v", name, err)
+		s.logger.Error("upload ingest failed", slog.String("file", name), slog.Any("error", err))
 		http.Error(w, "ingest failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -293,9 +301,9 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	if s.processedDir != "" {
 		dest := filepath.Join(s.processedDir, name)
 		if err := os.MkdirAll(s.processedDir, 0o755); err != nil {
-			log.Printf("[web] mkdir %s: %v", s.processedDir, err)
+			s.logger.Error("mkdir processed dir", slog.String("dir", s.processedDir), slog.Any("error", err))
 		} else if err := os.WriteFile(dest, content, 0o644); err != nil {
-			log.Printf("[web] archive %s: %v", dest, err)
+			s.logger.Error("archive file", slog.String("dest", dest), slog.Any("error", err))
 		}
 	}
 
@@ -340,7 +348,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	if s.retriever != nil {
 		ctxText, err := s.retriever.Retrieve(r.Context(), history)
 		if err != nil {
-			log.Printf("[web] retrieval error: %v", err)
+			s.logger.Error("retrieval error", slog.Any("error", err))
 		} else {
 			turn = withInlineContext(history, ctxText)
 		}
@@ -395,7 +403,23 @@ func (s *Server) handleChatPage(w http.ResponseWriter, r *http.Request) {
 		"Title":          s.title,
 		"CaptionEnabled": s.client.HasVision(),
 	}); err != nil {
-		log.Printf("[web] template error:  %v", err)
+		s.logger.Error("template error", slog.Any("error", err))
+	}
+}
+
+func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			start := time.Now()
+			next.ServeHTTP(ww, r)
+			logger.Info("request",
+				slog.String("method", r.Method),
+				slog.String("path", r.URL.Path),
+				slog.Int("status", ww.Status()),
+				slog.Duration("duration", time.Since(start)),
+			)
+		})
 	}
 }
 

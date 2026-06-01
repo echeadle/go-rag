@@ -24,7 +24,7 @@ import (
 	"go-rag/vector"
 	"go-rag/vector/pgvector"
 	"go-rag/web"
-	"log"
+	"log/slog"
 	"os"
 	"sync"
 )
@@ -33,10 +33,8 @@ import (
 // foreground REPL, so Run constructs the LLM client and hands it
 // straight to chat.RunREPL.
 func Run(parent context.Context, cfg config.Config) error {
-	// A stderr-tagged logger so connection-related
-	// status lines ("vector store ready", "vector store disabled: ...")
-	// are clearly distinguishable from chat output on stdout.
-	logger := log.New(os.Stderr, "[rag] ", log.LstdFlags)
+	// TextHandler to stderr keeps status lines off the stdout chat stream.
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
@@ -52,9 +50,10 @@ func Run(parent context.Context, cfg config.Config) error {
 	// migration failure) is also logged but not fatal.
 	store, err := openStore(ctx, cfg)
 	if err != nil {
-		logger.Printf("vector store disabled: %v", err)
+		logger.Error("vector store disabled", slog.Any("error", err))
 	}
 
+	ingestLogger := logger.With(slog.String("component", "ingest"))
 	var wg sync.WaitGroup
 	if store != nil {
 		wg.Add(1)
@@ -64,11 +63,11 @@ func Run(parent context.Context, cfg config.Config) error {
 				SourceDir:    cfg.IngestDir,
 				ProcessedDir: cfg.ProcessedDir,
 			}
-			if err := ingest.Watch(ctx, opts, embedder, store, logger); err != nil && ctx.Err() == nil {
-				logger.Printf("watcher stopped: %v", err)
+			if err := ingest.Watch(ctx, opts, embedder, store, ingestLogger); err != nil && ctx.Err() == nil {
+				logger.Error("watcher stopped", slog.Any("error", err))
 			}
 		}()
-		logger.Printf("watching %s for new documents", cfg.IngestDir)
+		logger.Info("watching dir for documents", slog.String("dir", cfg.IngestDir))
 	}
 
 	// Defer Close so the connection pool drains
@@ -77,7 +76,7 @@ func Run(parent context.Context, cfg config.Config) error {
 	// DATABASE_URL is unset.
 	if store != nil {
 		defer store.Close()
-		logger.Printf("vector store ready")
+		logger.Info("vector store ready")
 	}
 
 	//get a retriever, which means we need a rewriter
@@ -96,16 +95,17 @@ func Run(parent context.Context, cfg config.Config) error {
 			Store:            store,
 			ProcessedDir:     cfg.ProcessedDir,
 			ImagesDir:        cfg.ImageDir,
+			Logger:           logger.With(slog.String("component", "web")),
 		})
 		if err != nil {
-			logger.Printf("web server disabled: %v", err)
+			logger.Error("web server disabled", slog.Any("error", err))
 		} else {
 			wg.Go(func() {
 				if err := srv.Run(ctx, cfg.HTTPAddr); err != nil && ctx.Err() == nil {
-					logger.Printf("web server stopped: %v", err)
+					logger.Error("web server stopped", slog.Any("error", err))
 				}
 			})
-			logger.Printf("web chat at http://localhost%s/chat", cfg.HTTPAddr)
+			logger.Info("web chat available", slog.String("addr", cfg.HTTPAddr))
 		}
 	}
 

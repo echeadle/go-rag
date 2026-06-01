@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"go-rag/ingest"
 	"io"
-	"log"
+	"log/slog"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -56,21 +56,23 @@ func scanForInjection(s string) string {
 	return ""
 }
 
-func InjectionDefense(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		switch mt {
-		case "application/json":
-			inspectJSON(w, r, next)
-		case "multipart/form-data":
-			inspectMultiPart(w, r, next)
-		default:
-			next.ServeHTTP(w, r)
-		}
-	})
+func InjectionDefense(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+			switch mt {
+			case "application/json":
+				inspectJSON(w, r, next, logger)
+			case "multipart/form-data":
+				inspectMultiPart(w, r, next, logger)
+			default:
+				next.ServeHTTP(w, r)
+			}
+		})
+	}
 }
 
-func inspectJSON(w http.ResponseWriter, r *http.Request, next http.Handler) {
+func inspectJSON(w http.ResponseWriter, r *http.Request, next http.Handler, logger *slog.Logger) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
 	if err != nil {
 		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
@@ -84,7 +86,7 @@ func inspectJSON(w http.ResponseWriter, r *http.Request, next http.Handler) {
 				continue
 			}
 			if hit := scanForInjection(m.Content); hit != "" {
-				log.Printf("[web-defense] blocked chat request: pattern=%q route=%s", hit, r.URL.Path)
+				logger.Warn("injection blocked", slog.String("pattern", hit), slog.String("route", r.URL.Path))
 				http.Error(w, "request rejected by injection-defense filter", http.StatusBadRequest)
 				return
 			}
@@ -95,7 +97,7 @@ func inspectJSON(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	next.ServeHTTP(w, r)
 }
 
-func inspectMultiPart(w http.ResponseWriter, r *http.Request, next http.Handler) {
+func inspectMultiPart(w http.ResponseWriter, r *http.Request, next http.Handler, logger *slog.Logger) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxMultipartBytes)
 	if err := r.ParseMultipartForm(maxMultipartBytes); err != nil {
 		next.ServeHTTP(w, r)
@@ -105,7 +107,7 @@ func inspectMultiPart(w http.ResponseWriter, r *http.Request, next http.Handler)
 	for name, vals := range r.MultipartForm.Value {
 		for _, v := range vals {
 			if hit := scanForInjection(v); hit != "" {
-				log.Printf("[web-defense] blocked chat request: pattern=%q field=%q route=%s", hit, name, r.URL.Path)
+				logger.Warn("injection blocked", slog.String("pattern", hit), slog.String("field", name), slog.String("route", r.URL.Path))
 				http.Error(w, "request rejected by injection-defense filter", http.StatusBadRequest)
 				return
 			}
@@ -120,13 +122,12 @@ func inspectMultiPart(w http.ResponseWriter, r *http.Request, next http.Handler)
 
 			hit, err := scanFilePart(fh)
 			if err != nil {
-				log.Printf("[web-defense] read upload %q: %v", fh.Filename, err)
+				logger.Error("read upload for scan", slog.String("file", fh.Filename), slog.Any("error", err))
 				http.Error(w, "uploaded document rejected by injection-defense filter", http.StatusBadRequest)
 				return
 			}
 			if hit != "" {
-				log.Printf("[web-defense] blocked upload: pattern=%q file=%q field=%q route=%q",
-					hit, fh.Filename, field, r.URL.Path)
+				logger.Warn("upload injection blocked", slog.String("pattern", hit), slog.String("file", fh.Filename), slog.String("field", field), slog.String("route", r.URL.Path))
 				http.Error(w, "request rejected by injection-defense filter", http.StatusBadRequest)
 				return
 			}

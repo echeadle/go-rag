@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"go-rag/llm"
 	"go-rag/vector"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,7 +18,7 @@ import (
 
 const debounceDelay = 500 * time.Millisecond
 
-func Watch(ctx context.Context, opts Options, embedder llm.Embedder, store vector.Store, logger *log.Logger) error {
+func Watch(ctx context.Context, opts Options, embedder llm.Embedder, store vector.Store, logger *slog.Logger) error {
 	if filepath.Clean(opts.SourceDir) == filepath.Clean(opts.ProcessedDir) {
 		return errors.New("source and processed directories must be different")
 	}
@@ -46,16 +46,17 @@ func Watch(ctx context.Context, opts Options, embedder llm.Embedder, store vecto
 	}
 
 	handle := func(path string) {
+		base := filepath.Base(path)
 		if err := processOne(ctx, path, opts, embedder, store); err != nil {
-			logger.Printf("process %s: %v", filepath.Base(path), err)
+			logger.Error("process file", slog.String("file", base), slog.Any("error", err))
 			return
 		}
-		dst := filepath.Join(opts.ProcessedDir, filepath.Base(path))
+		dst := filepath.Join(opts.ProcessedDir, base)
 		if err := os.Rename(path, dst); err != nil {
-			logger.Printf("move %s to processed: %v", filepath.Base(path), err)
+			logger.Error("move to processed", slog.String("file", base), slog.Any("error", err))
 			return
 		}
-		logger.Printf("ingested %s", filepath.Base(path))
+		logger.Info("ingested", slog.String("file", base))
 	}
 
 	entries, err := os.ReadDir(opts.SourceDir)
@@ -109,7 +110,7 @@ func Watch(ctx context.Context, opts Options, embedder llm.Embedder, store vecto
 			if !ok {
 				return nil
 			}
-			logger.Printf("watcher error: %v", err)
+			logger.Error("watcher error", slog.Any("error", err))
 		}
 	}
 }
