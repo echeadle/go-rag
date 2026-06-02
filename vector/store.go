@@ -105,4 +105,8 @@ type Store interface {
 	// connections). Calling Close on an already-closed Store is a
 	// no-op.
 	Close() error
+
+	// Ping verifies the store is reachable. Used by the /healthz endpoint
+	// to distinguish "process is up" from "process + DB are up".
+	Ping(ctx context.Context) error
 }

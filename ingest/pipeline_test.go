@@ -57,6 +57,7 @@ func (s *fakeStore) Query(_ context.Context, _ []float32, _ int) ([]vector.Resul
 
 func (s *fakeStore) Delete(_ context.Context, _ []string) error { return nil }
 func (s *fakeStore) Close() error                               { return nil }
+func (s *fakeStore) Ping(_ context.Context) error               { return nil }
 
 // errStore always fails on Upsert.
 type errStore struct{ fakeStore }

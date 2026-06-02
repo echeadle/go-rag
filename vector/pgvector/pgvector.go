@@ -208,3 +208,7 @@ func (s *Store) Close() error {
 	s.pool.Close()
 	return nil
 }
+
+func (s *Store) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
+}

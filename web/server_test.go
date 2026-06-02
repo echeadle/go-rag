@@ -32,6 +32,7 @@ func (fakeWebStore) Query(_ context.Context, _ []float32, _ int) ([]vector.Resul
 func (fakeWebStore) Delete(_ context.Context, _ []string) error          { return nil }
 func (fakeWebStore) DeleteBySource(_ context.Context, _ string) error    { return nil }
 func (fakeWebStore) Close() error                                         { return nil }
+func (fakeWebStore) Ping(_ context.Context) error                         { return nil }
 
 // noFlusher wraps a ResponseRecorder without exposing http.Flusher.
 // httptest.ResponseRecorder itself implements Flusher; this wrapper

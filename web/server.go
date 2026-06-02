@@ -91,6 +91,7 @@ func (s *Server) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(requestLogger(s.logger))
+	r.Get("/healthz", s.handleHealthz)
 	r.Get("/chat", s.handleChatPage)
 
 	r.Group(func(r chi.Router) {
@@ -395,6 +396,20 @@ func withInlineContext(history []llm.Message, contextText string) []llm.Message 
 		Content: contextText + "\n\n--- Question ---\n\n" + last.Content,
 	}
 	return out
+}
+
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	if s.store != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		if err := s.store.Ping(ctx); err != nil {
+			s.logger.Error("healthz db ping failed", slog.Any("error", err))
+			http.Error(w, "db unavailable", http.StatusServiceUnavailable)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintln(w, "ok")
 }
 
 func (s *Server) handleChatPage(w http.ResponseWriter, r *http.Request) {

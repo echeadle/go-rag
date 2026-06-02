@@ -109,13 +109,32 @@ func Run(parent context.Context, cfg config.Config) error {
 		}
 	}
 
-	replErr := chat.RunREPL(ctx, client, retriever, chat.Options{
-		SystemPromptFile: cfg.SystemPromptFile,
-	})
+	var replErr error
+	if isTerminal() {
+		replErr = chat.RunREPL(ctx, client, retriever, chat.Options{
+			SystemPromptFile: cfg.SystemPromptFile,
+		})
+	} else {
+		// No TTY (container or piped stdin): run as a pure server.
+		// Block until the signal context is cancelled (Ctrl-C / SIGTERM).
+		logger.Info("no TTY detected — running in server-only mode")
+		<-ctx.Done()
+	}
 
 	cancel()
 	wg.Wait()
 	return replErr
+}
+
+// isTerminal reports whether os.Stdin is an interactive terminal.
+// When it is not (container, piped input, CI), the REPL is skipped
+// and the process runs as a pure HTTP server.
+func isTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }
 
 func openStore(ctx context.Context, cfg config.Config) (vector.Store, error) {
