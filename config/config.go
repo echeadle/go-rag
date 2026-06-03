@@ -24,6 +24,9 @@ type Config struct {
 	HTTPAddr    string
 	ImageDir    string
 	VisionModel string
+	// ServerAPIKey guards all /api/* routes. Loaded from API_KEY env var.
+	// Distinct from APIKey (OPENAI_API_KEY) — different secret, different purpose.
+	ServerAPIKey string
 }
 
 func Load() Config {
@@ -44,6 +47,7 @@ func Load() Config {
 		HTTPAddr:         os.Getenv("HTTP_ADDR"),
 		ImageDir:         os.Getenv("IMAGES_DIR"),
 		VisionModel:      os.Getenv("VISION_MODEL"),
+		ServerAPIKey:     os.Getenv("API_KEY"),
 	}
 
 	if cfg.BaseURL == "" {

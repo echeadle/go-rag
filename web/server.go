@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -43,6 +44,7 @@ type Options struct {
 	ProcessedDir     string
 	ImagesDir        string
 	Logger           *slog.Logger
+	ServerAPIKey     string
 }
 
 type Server struct {
@@ -56,6 +58,7 @@ type Server struct {
 	system       string
 	title        string
 	logger       *slog.Logger
+	serverAPIKey string
 }
 
 func New(client, embedder *llm.Client, retriever *rag.Retriever, opts Options) (*Server, error) {
@@ -73,6 +76,9 @@ func New(client, embedder *llm.Client, retriever *rag.Retriever, opts Options) (
 	if lg == nil {
 		lg = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
+	if opts.ServerAPIKey == "" {
+		lg.Warn("API_KEY not set — authentication disabled; all /api/* routes are open")
+	}
 	return &Server{
 		client:       client,
 		embedder:     embedder,
@@ -84,6 +90,7 @@ func New(client, embedder *llm.Client, retriever *rag.Retriever, opts Options) (
 		system:       readSystemPrompt(opts.SystemPromptFile),
 		title:        title,
 		logger:       lg,
+		serverAPIKey: opts.ServerAPIKey,
 	}, nil
 }
 
@@ -91,24 +98,34 @@ func (s *Server) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(requestLogger(s.logger))
+
+	// Open routes — no auth required.
 	r.Get("/healthz", s.handleHealthz)
 	r.Get("/chat", s.handleChatPage)
 
-	r.Group(func(r chi.Router) {
-		r.Use(InjectionDefense(s.logger))
-		r.Post("/api/chat/stream", s.handleChatStream)
-		r.Post("/api/upload", s.handleUpload)
-		if s.imagesDir != "" {
-			r.Post("/api/upload/image", s.handleUploadImage)
-		}
-	})
-
+	// /images/* must stay open: <img src> tags cannot send Authorization headers.
 	fs := http.FileServer(http.Dir(s.imagesDir))
 	r.Handle("/images/*", http.StripPrefix("/images", fs))
 
-	if s.client.HasVision() {
-		r.Post("/api/caption", s.handleCaption)
-	}
+	// All /api/* routes require a valid Bearer token.
+	r.Route("/api", func(r chi.Router) {
+		r.Use(requireAuth(s.serverAPIKey))
+
+		// Injection defense on text-input routes (chat stream and document upload).
+		r.Group(func(r chi.Router) {
+			r.Use(InjectionDefense(s.logger))
+			r.Post("/chat/stream", s.handleChatStream)
+			r.Post("/upload", s.handleUpload)
+			if s.imagesDir != "" {
+				r.Post("/upload/image", s.handleUploadImage)
+			}
+		})
+
+		// Caption: authed but no injection defense (binary file upload, not text).
+		if s.client != nil && s.client.HasVision() {
+			r.Post("/caption", s.handleCaption)
+		}
+	})
 
 	return r
 }
@@ -419,6 +436,31 @@ func (s *Server) handleChatPage(w http.ResponseWriter, r *http.Request) {
 		"CaptionEnabled": s.client.HasVision(),
 	}); err != nil {
 		s.logger.Error("template error", slog.Any("error", err))
+	}
+}
+
+// requireAuth returns middleware that checks for a valid Bearer token.
+// When key is empty (API_KEY unset) every request is allowed through — this
+// preserves local dev behaviour without requiring a key to be configured.
+func requireAuth(key string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if key == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			header := r.Header.Get("Authorization")
+			if !strings.HasPrefix(header, "Bearer ") {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			got := strings.TrimPrefix(header, "Bearer ")
+			if subtle.ConstantTimeCompare([]byte(got), []byte(key)) != 1 {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
 	}
 }
 

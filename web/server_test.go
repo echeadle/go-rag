@@ -294,6 +294,79 @@ func TestHandleChatStream_LastRoleNotUser(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "user")
 }
 
+// --- requireAuth middleware tests ---
+
+func TestRequireAuth_NoKeyConfigured_AllowsAll(t *testing.T) {
+	// Empty key = auth disabled; every request passes through.
+	handler := requireAuth("")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestRequireAuth_KeySet(t *testing.T) {
+	const key = "test-secret"
+	handler := requireAuth(key)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	tests := []struct {
+		name       string
+		authHeader string
+		wantStatus int
+	}{
+		{"no header", "", http.StatusUnauthorized},
+		{"wrong key", "Bearer wrong-key", http.StatusUnauthorized},
+		{"bare token without Bearer prefix", "test-secret", http.StatusUnauthorized},
+		{"correct key", "Bearer test-secret", http.StatusOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tt.authHeader != "" {
+				req.Header.Set("Authorization", tt.authHeader)
+			}
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+			assert.Equal(t, tt.wantStatus, rr.Code)
+		})
+	}
+}
+
+func TestRoutes_OpenEndpointsRequireNoAuth(t *testing.T) {
+	s := serverWithClient(t)
+	s.serverAPIKey = "secret"
+	r := s.Routes()
+
+	for _, path := range []string{"/healthz", "/chat"} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+			assert.NotEqual(t, http.StatusUnauthorized, rr.Code, "expected %s to be open without auth", path)
+		})
+	}
+}
+
+func TestRoutes_APIRequiresAuth(t *testing.T) {
+	s := serverWithClient(t)
+	s.serverAPIKey = "secret"
+	r := s.Routes()
+
+	for _, path := range []string{"/api/chat/stream", "/api/upload"} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("{}"))
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+			assert.Equal(t, http.StatusUnauthorized, rr.Code)
+		})
+	}
+}
+
 // --- handleChatPage test ---
 
 func TestHandleChatPage_OK(t *testing.T) {

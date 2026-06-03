@@ -31,6 +31,18 @@
       </button>
       <button
         type="button"
+        id="keyBtn"
+        title="Set API key"
+        class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+        aria-label="API key"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </button>
+      <button
+        type="button"
         id="attachImage"
         title="Upload an image with a description"
         class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
@@ -106,6 +118,24 @@
     </form>
   </dialog>
 
+  <dialog id="keyDialog" class="rounded-2xl p-0 backdrop:bg-slate-900/40">
+    <form id="keyForm" class="flex w-80 max-w-[90vw] flex-col gap-3 p-5">
+      <h2 class="text-base font-semibold text-slate-900">API Key</h2>
+      <p class="text-xs text-slate-500">Enter your API key to authenticate with the server. It will be saved in your browser.</p>
+      <input
+        type="password"
+        id="keyInput"
+        placeholder="Bearer token…"
+        autocomplete="off"
+        class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+      >
+      <div class="flex justify-end gap-2">
+        <button type="button" id="keyCancel" class="rounded-full px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button type="submit" class="rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700">Save</button>
+      </div>
+    </form>
+  </dialog>
+
 <script>
   const log = document.getElementById("log");
   const form = document.getElementById("form");
@@ -120,7 +150,42 @@
   const imageDescription = document.getElementById("imageDescription");
   const imageCancel = document.getElementById("imageCancel");
   const imageSubmit = document.getElementById("imageSubmit");
+  const keyDialog = document.getElementById("keyDialog");
+  const keyForm = document.getElementById("keyForm");
+  const keyInput = document.getElementById("keyInput");
+  const keyCancel = document.getElementById("keyCancel");
   const history = [];
+
+  // ── API key management ────────────────────────────────────────────────────
+  // The key is stored in localStorage so the user only enters it once.
+  // Every /api/* fetch includes it as "Authorization: Bearer <key>".
+  const KEY_STORAGE = 'go_rag_api_key';
+
+  function getApiKey() { return localStorage.getItem(KEY_STORAGE) || ''; }
+
+  function authHeaders() {
+    const key = getApiKey();
+    return key ? { 'Authorization': 'Bearer ' + key } : {};
+  }
+
+  function showKeyDialog(msg) {
+    if (msg) renderNotice(msg, "error");
+    keyInput.value = getApiKey();
+    keyDialog.showModal();
+    keyInput.focus();
+  }
+
+  // Show on page load when no key is stored yet.
+  if (!getApiKey()) { keyDialog.showModal(); keyInput.focus(); }
+
+  keyForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    localStorage.setItem(KEY_STORAGE, keyInput.value.trim());
+    keyDialog.close();
+  });
+  keyCancel.addEventListener("click", () => keyDialog.close());
+  document.getElementById("keyBtn").addEventListener("click", () => showKeyDialog());
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Render a centered, italic system notice — used for upload status
   // and other out-of-band events that aren't part of the chat
@@ -246,7 +311,7 @@
       try {
         const body = new FormData();
         body.append("image", file);
-        const res = await fetch("/api/caption", { method: "POST", body });
+        const res = await fetch("/api/caption", { method: "POST", headers: authHeaders(), body });
         if (!res.ok) {
           const err = (await res.text()).trim();
           alert("Caption failed: " + (err || res.statusText));
@@ -278,8 +343,9 @@
       body.append("image", file);
       body.append("description", description);
 
-      const res = await fetch("/api/upload/image", { method: "POST", body });
+      const res = await fetch("/api/upload/image", { method: "POST", headers: authHeaders(), body });
 
+      if (res.status === 401) { showKeyDialog("Invalid or missing API key."); return; }
       if (!res.ok) {
         const err = (await res.text()).trim();
         notice.textContent = `❌ ${file.name}: ${err || res.statusText}`;
@@ -317,8 +383,9 @@
       const body = new FormData();
       body.append("file", file);
 
-      const res = await fetch("/api/upload", { method: "POST", body });
+      const res = await fetch("/api/upload", { method: "POST", headers: authHeaders(), body });
 
+      if (res.status === 401) { showKeyDialog("Invalid or missing API key."); return; }
       if (!res.ok) {
         const err = (await res.text()).trim();
         notice.textContent = `❌ ${file.name}: ${err || res.statusText}`;
@@ -364,9 +431,10 @@
     try {
       const res = await fetch("/api/chat/stream", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ messages: history }),
       });
+      if (res.status === 401) { history.pop(); showKeyDialog("Invalid or missing API key."); return; }
       if (!res.ok || !res.body) {
         const err = await res.text();
         ensureBubble().setMarkdown("error: " + err);
