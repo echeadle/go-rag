@@ -60,6 +60,9 @@ services:
       # The .env file uses localhost, which only works outside the container.
       OPENAI_BASE_URL: http://host.docker.internal:11434/v1
       EMBEDDING_BASE_URL: http://host.docker.internal:11434/v1
+      # Pin to the container-relative path regardless of what .env has.
+      # The prompts dir is copied into the image at /app/prompts.
+      SYSTEM_PROMPT_FILE: ./prompts/system-custom.md
     # ── Runtime hardening ─────────────────────────────────────────────────────
     # read_only: the container filesystem is immutable. The app can only write
     # to explicitly mounted volumes (./documents below). Prevents malware from

@@ -25,6 +25,9 @@ FROM gcr.io/distroless/static-debian12
 WORKDIR /app
 
 COPY --from=builder /build/go-rag .
+# The prompts directory holds runtime config (system prompt, etc.).
+# It is not embedded in the binary, so it must be copied explicitly.
+COPY --from=builder /build/prompts ./prompts
 
 USER nonroot:nonroot
 
