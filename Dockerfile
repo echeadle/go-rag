@@ -23,9 +23,19 @@ FROM alpine:3.21
 # Without it the Go TLS stack fails with "x509: certificate signed by unknown authority".
 RUN apk add --no-cache ca-certificates
 
+# Create a dedicated non-root user.
+# -D: no password (non-interactive account)
+# -u 1001: explicit UID so the identity is stable and predictable across rebuilds
+RUN adduser -D -u 1001 appuser
+
 WORKDIR /app
 
 COPY --from=builder /build/go-rag .
+
+# All instructions above run as root (needed to install packages and copy files).
+# Switch to appuser now — the process inside the container is no longer root
+# from this point on, including the CMD.
+USER appuser
 
 EXPOSE 8080
 
