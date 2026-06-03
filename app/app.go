@@ -28,6 +28,8 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+
+	"golang.org/x/term"
 )
 
 // Run is the program's main loop. In lesson 1 there is only the
@@ -129,12 +131,10 @@ func Run(parent context.Context, cfg config.Config) error {
 // isTerminal reports whether os.Stdin is an interactive terminal.
 // When it is not (container, piped input, CI), the REPL is skipped
 // and the process runs as a pure HTTP server.
+// os.Stdin.Stat() is not sufficient — /dev/null is also a character device.
+// term.IsTerminal uses the TIOCGETA ioctl to ask the kernel directly.
 func isTerminal() bool {
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 func openStore(ctx context.Context, cfg config.Config) (vector.Store, error) {
