@@ -14,28 +14,19 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o go-rag ./cmd/rag/
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
-# alpine:3.21 is small (~7 MB) but still has a shell and package manager,
-# which is useful for debugging in early development (Steps 1–3).
-# Step 4 replaces this with distroless for a minimal attack surface.
-FROM alpine:3.21
-
-# ca-certificates is required for any HTTPS call (OpenAI API, remote embedders).
-# Without it the Go TLS stack fails with "x509: certificate signed by unknown authority".
-RUN apk add --no-cache ca-certificates
-
-# Create a dedicated non-root user.
-# -D: no password (non-interactive account)
-# -u 1001: explicit UID so the identity is stable and predictable across rebuilds
-RUN adduser -D -u 1001 appuser
+# distroless/static contains only CA certs, tzdata, and the binary — no shell,
+# no package manager, no utilities. An attacker who breaks out of the app
+# process has nothing to work with.
+# CA certificates are bundled in the image, so no apk/apt install needed.
+# The built-in nonroot user (UID 65532) replaces the alpine adduser approach —
+# distroless has no shell to run adduser in.
+FROM gcr.io/distroless/static-debian12
 
 WORKDIR /app
 
 COPY --from=builder /build/go-rag .
 
-# All instructions above run as root (needed to install packages and copy files).
-# Switch to appuser now — the process inside the container is no longer root
-# from this point on, including the CMD.
-USER appuser
+USER nonroot:nonroot
 
 EXPOSE 8080
 
