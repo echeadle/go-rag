@@ -55,10 +55,25 @@ services:
       # The .env file uses localhost, which only works outside the container.
       OPENAI_BASE_URL: http://host.docker.internal:11434/v1
       EMBEDDING_BASE_URL: http://host.docker.internal:11434/v1
+    # ── Runtime hardening ─────────────────────────────────────────────────────
+    # read_only: the container filesystem is immutable. The app can only write
+    # to explicitly mounted volumes (./documents below). Prevents malware from
+    # dropping files anywhere else in the container.
+    read_only: true
+    security_opt:
+      # Prevents the process from gaining elevated privileges through setuid/setgid
+      # binaries. Even if an attacker found one, it could not become root.
+      - no-new-privileges:true
+    cap_drop:
+      # Drop every Linux capability. A Go HTTP server needs none of them.
+      # Add individual caps back here if the app ever needs one (e.g. CAP_NET_BIND_SERVICE
+      # to bind port 80 without root — not needed since we use port 8080).
+      - ALL
     ports:
       - "8080:8080"
     volumes:
       # Mount the documents directory so ingested files survive container restarts.
+      # This is also the only path the app is allowed to write to (read_only: true above).
       - ./documents:/app/documents
 
 volumes:
