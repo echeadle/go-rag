@@ -1,18 +1,23 @@
+networks:
+  rag-net:
+    driver: bridge
+
 services:
   postgres:
     # Official image: Postgres 18 with the pgvector extension preinstalled.
     image: pgvector/pgvector:pg18
     container_name: rag-course-postgres
     restart: unless-stopped
+    networks:
+      - rag-net
     environment:
       POSTGRES_USER: rag
       POSTGRES_PASSWORD: rag
       POSTGRES_DB: rag
-    ports:
-      # Port exposed to host for local psql / pgAdmin access.
-      # Removed in Step 6 (network isolation) so the DB is only reachable
-      # from inside the Docker network.
-      - "5432:5432"
+    # No ports: block — postgres is only reachable from within rag-net.
+    # The app connects via the service name "postgres" on the internal network.
+    # Port 5432 is never bound on the host, eliminating conflict with a local
+    # Postgres instance.
     volumes:
       # Postgres 18+ stores data in a major-version subdirectory and
       # expects the mount at /var/lib/postgresql (the parent), not at
@@ -69,7 +74,10 @@ services:
       # Add individual caps back here if the app ever needs one (e.g. CAP_NET_BIND_SERVICE
       # to bind port 80 without root — not needed since we use port 8080).
       - ALL
+    networks:
+      - rag-net
     ports:
+      # Only the app's HTTP port is published to the host.
       - "8080:8080"
     volumes:
       # Mount the documents directory so ingested files survive container restarts.
