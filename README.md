@@ -135,3 +135,73 @@ Datadog, and CloudWatch — each field is individually searchable and filterable
 # Docker example: merge stderr into stdout for the container log driver to capture
 docker run ... 2>&1
 ```
+
+---
+
+## Authentication
+
+All `/api/*` routes (chat, upload, image upload, caption) are protected by a static
+Bearer token. The `/chat` page, `/healthz`, and `/images/*` are intentionally open —
+image tags in the browser cannot send Authorization headers.
+
+### How it works
+
+Every API request from the browser includes an `Authorization: Bearer <key>` header.
+The first time you open the chat page, a dialog prompts for the key. The key is stored
+in `localStorage` so you only enter it once per browser. A lock icon button (🔒) in the
+chat toolbar lets you update it at any time.
+
+If the key is wrong or missing the server returns `401 Unauthorized` and the dialog
+re-appears.
+
+### Configuration
+
+Set `API_KEY` in your `.env` file:
+
+```
+API_KEY=your-secret-key-here
+```
+
+When `API_KEY` is not set the server starts in **open mode** — all API routes are
+accessible without a key. This is intentional for local development. A warning is
+logged at startup:
+
+```
+level=WARN msg="API_KEY not set — authentication disabled; all /api/* routes are open"
+```
+
+### Generating a good key
+
+An API key is a long random secret — the security comes entirely from it being
+unguessable. Use a cryptographically secure random number generator, not a password
+or a word.
+
+**Recommended — 32 bytes of randomness, base64-encoded (same strength as Claude API keys):**
+
+```bash
+openssl rand -base64 32
+```
+
+Example output: `K7gNU3sdo+OL0wNhqoVWhr3g6s1xYv72ol/pe/Unols=`
+
+**Alternative — hex encoding (no special characters):**
+
+```bash
+openssl rand -hex 32
+```
+
+Example output: `a3f2c1d4e5b6a7f8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2`
+
+Both produce 256 bits of entropy — more than enough. Copy the output directly into
+your `.env`. Do not reuse passwords, phrases, or anything shorter than 32 characters.
+
+### Why this is different from an SSH key
+
+An **SSH key** is an asymmetric key *pair* — a private key you keep and a public key
+you give to the server (e.g. GitHub). You never send the private key anywhere; you use
+it to sign a challenge and the server verifies the signature. This works when you
+cannot safely share a secret with the server ahead of time.
+
+An **API key** is a symmetric secret — both you and the server know the same value.
+You include it in every request; the server compares it to what it stored. Simpler,
+and the right choice for a single-user personal tool where you control both sides.
