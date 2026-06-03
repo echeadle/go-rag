@@ -35,6 +35,11 @@ services:
     # Load API keys and other local settings from .env.
     # DATABASE_URL and HTTP_ADDR are overridden below because their values
     # differ between local dev (localhost) and container (service name / 0.0.0.0).
+    # host.docker.internal resolves to the host machine's IP from inside the
+    # container. On Linux, this requires the extra_hosts entry below — it is
+    # not automatic the way it is on Docker Desktop for Mac/Windows.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file: .env
     environment:
       # "postgres" is the service name above — Docker's DNS resolves it
@@ -45,6 +50,11 @@ services:
       # Binding to 127.0.0.1 (the local-dev default) would make the port
       # unreachable even though it's published below.
       HTTP_ADDR: :8080
+      # Replace localhost with host.docker.internal so the container can reach
+      # Ollama (or any other service) running on the host machine.
+      # The .env file uses localhost, which only works outside the container.
+      OPENAI_BASE_URL: http://host.docker.internal:11434/v1
+      EMBEDDING_BASE_URL: http://host.docker.internal:11434/v1
     ports:
       - "8080:8080"
     volumes:
