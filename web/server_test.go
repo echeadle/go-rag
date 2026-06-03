@@ -367,6 +367,44 @@ func TestRoutes_APIRequiresAuth(t *testing.T) {
 	}
 }
 
+// --- rate limiting tests ---
+
+func TestRateLimit_BlocksAfterLimit(t *testing.T) {
+	const limit = 3
+	s := serverWithClient(t)
+	s.serverAPIKey = ""          // auth disabled so the test focuses on rate limiting
+	s.rateLimitRequests = limit
+	r := s.Routes()
+
+	// First `limit` requests must not be rate-limited (status may vary by handler).
+	for i := 0; i < limit; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/chat/stream", strings.NewReader("{}"))
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.NotEqual(t, http.StatusTooManyRequests, rr.Code, "request %d should not be rate limited", i+1)
+	}
+
+	// One over the limit must return 429.
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/stream", strings.NewReader("{}"))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusTooManyRequests, rr.Code)
+}
+
+func TestRateLimit_DisabledWhenZero(t *testing.T) {
+	s := serverWithClient(t)
+	s.serverAPIKey = ""
+	s.rateLimitRequests = 0 // disabled
+	r := s.Routes()
+
+	for i := 0; i < 10; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/chat/stream", strings.NewReader("{}"))
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.NotEqual(t, http.StatusTooManyRequests, rr.Code)
+	}
+}
+
 // --- handleChatPage test ---
 
 func TestHandleChatPage_OK(t *testing.T) {

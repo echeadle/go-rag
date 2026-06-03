@@ -27,6 +27,10 @@ type Config struct {
 	// ServerAPIKey guards all /api/* routes. Loaded from API_KEY env var.
 	// Distinct from APIKey (OPENAI_API_KEY) — different secret, different purpose.
 	ServerAPIKey string
+
+	// RateLimitRequests is the max requests per IP per minute on /api/* routes.
+	// 0 disables rate limiting.
+	RateLimitRequests int
 }
 
 func Load() Config {
@@ -47,7 +51,8 @@ func Load() Config {
 		HTTPAddr:         os.Getenv("HTTP_ADDR"),
 		ImageDir:         os.Getenv("IMAGES_DIR"),
 		VisionModel:      os.Getenv("VISION_MODEL"),
-		ServerAPIKey:     os.Getenv("API_KEY"),
+		ServerAPIKey:      os.Getenv("API_KEY"),
+		RateLimitRequests: atoiOr(os.Getenv("RATE_LIMIT_REQUESTS"), 100),
 	}
 
 	if cfg.BaseURL == "" {

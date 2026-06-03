@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 )
 
 //go:embed templates/*.gohtml
@@ -45,6 +46,9 @@ type Options struct {
 	ImagesDir        string
 	Logger           *slog.Logger
 	ServerAPIKey     string
+	// RateLimitRequests is the max requests per IP per minute on /api/* routes.
+	// 0 disables rate limiting.
+	RateLimitRequests int
 }
 
 type Server struct {
@@ -57,8 +61,9 @@ type Server struct {
 	tpl          *template.Template
 	system       string
 	title        string
-	logger       *slog.Logger
-	serverAPIKey string
+	logger            *slog.Logger
+	serverAPIKey      string
+	rateLimitRequests int
 }
 
 func New(client, embedder *llm.Client, retriever *rag.Retriever, opts Options) (*Server, error) {
@@ -79,6 +84,11 @@ func New(client, embedder *llm.Client, retriever *rag.Retriever, opts Options) (
 	if opts.ServerAPIKey == "" {
 		lg.Warn("API_KEY not set — authentication disabled; all /api/* routes are open")
 	}
+	if opts.RateLimitRequests > 0 {
+		lg.Info("rate limiting enabled", slog.Int("requests_per_minute", opts.RateLimitRequests))
+	} else {
+		lg.Warn("rate limiting disabled")
+	}
 	return &Server{
 		client:       client,
 		embedder:     embedder,
@@ -89,8 +99,9 @@ func New(client, embedder *llm.Client, retriever *rag.Retriever, opts Options) (
 		tpl:          tpl,
 		system:       readSystemPrompt(opts.SystemPromptFile),
 		title:        title,
-		logger:       lg,
-		serverAPIKey: opts.ServerAPIKey,
+		logger:            lg,
+		serverAPIKey:      opts.ServerAPIKey,
+		rateLimitRequests: opts.RateLimitRequests,
 	}, nil
 }
 
@@ -107,9 +118,12 @@ func (s *Server) Routes() http.Handler {
 	fs := http.FileServer(http.Dir(s.imagesDir))
 	r.Handle("/images/*", http.StripPrefix("/images", fs))
 
-	// All /api/* routes require a valid Bearer token.
+	// All /api/* routes require a valid Bearer token and are rate-limited per IP.
 	r.Route("/api", func(r chi.Router) {
 		r.Use(requireAuth(s.serverAPIKey))
+		if s.rateLimitRequests > 0 {
+			r.Use(httprate.LimitByIP(s.rateLimitRequests, time.Minute))
+		}
 
 		// Injection defense on text-input routes (chat stream and document upload).
 		r.Group(func(r chi.Router) {

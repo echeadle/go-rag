@@ -97,8 +97,9 @@ func Run(parent context.Context, cfg config.Config) error {
 			Store:            store,
 			ProcessedDir:     cfg.ProcessedDir,
 			ImagesDir:        cfg.ImageDir,
-			Logger:           logger.With(slog.String("component", "web")),
-			ServerAPIKey:     cfg.ServerAPIKey,
+			Logger:            logger.With(slog.String("component", "web")),
+			ServerAPIKey:      cfg.ServerAPIKey,
+			RateLimitRequests: cfg.RateLimitRequests,
 		})
 		if err != nil {
 			logger.Error("web server disabled", slog.Any("error", err))
