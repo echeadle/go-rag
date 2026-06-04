@@ -89,7 +89,7 @@ time=2024-01-15T10:23:45.123Z level=INFO  msg="vector store ready"
 time=2024-01-15T10:23:45.124Z level=INFO  msg="watching dir for documents" dir=./documents
 time=2024-01-15T10:23:45.125Z level=INFO  msg="web chat available" addr=:8080
 time=2024-01-15T10:23:46.001Z level=INFO  msg="request" component=web method=GET path=/chat status=200 duration=1.2ms
-time=2024-01-15T10:23:50.772Z level=WARN  msg="injection blocked" component=web pattern="(?i)\\bignore..." route=/api/chat/stream
+time=2024-01-15T10:23:50.772Z level=WARN  msg="injection blocked" component=web pattern="(?i)\\bignore..." route=/api/v1/chat/stream
 time=2024-01-15T10:24:01.003Z level=ERROR msg="upload ingest failed" component=web file=notes.txt error="unsupported format"
 ```
 
@@ -140,7 +140,7 @@ docker run ... 2>&1
 
 ## Authentication
 
-All `/api/*` routes (chat, upload, image upload, caption) are protected by a static
+All `/api/v1/*` routes (chat, upload, image upload, caption) are protected by a static
 Bearer token. The `/chat` page, `/healthz`, and `/images/*` are intentionally open —
 image tags in the browser cannot send Authorization headers.
 
@@ -167,7 +167,7 @@ accessible without a key. This is intentional for local development. A warning i
 logged at startup:
 
 ```
-level=WARN msg="API_KEY not set — authentication disabled; all /api/* routes are open"
+level=WARN msg="API_KEY not set — authentication disabled; all /api/v1/* routes are open"
 ```
 
 ### Generating a good key
@@ -205,3 +205,113 @@ cannot safely share a secret with the server ahead of time.
 An **API key** is a symmetric secret — both you and the server know the same value.
 You include it in every request; the server compares it to what it stored. Simpler,
 and the right choice for a single-user personal tool where you control both sides.
+
+---
+
+## API Reference
+
+All API endpoints are versioned under `/api/v1/`. Requests to protected endpoints must
+include an `Authorization: Bearer <key>` header.
+
+### Open endpoints (no auth required)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/chat` | Serves the chat UI (HTML page) |
+| `GET` | `/healthz` | Health check — pings the DB; returns `200 ok` or `503 db unavailable` |
+| `GET` | `/metrics` | Prometheus metrics endpoint |
+| `GET` | `/images/*` | Serves uploaded images by filename |
+
+### Protected endpoints (`Authorization: Bearer <key>` required)
+
+#### `POST /api/v1/chat/stream`
+
+Stream a chat completion over Server-Sent Events (SSE).
+
+**Request body** (`application/json`):
+```json
+{
+  "messages": [
+    { "role": "user", "content": "What does the document say about X?" }
+  ]
+}
+```
+Full conversation history is sent on each call — the server is stateless.
+
+**Response** (`text/event-stream`):
+```
+event: delta
+data: "Hello"
+
+event: delta
+data: " world"
+
+event: done
+data: ""
+```
+On error: `event: error` with the error message as a quoted JSON string.
+
+---
+
+#### `POST /api/v1/upload`
+
+Ingest a text document (`.txt`, `.md`, `.markdown`, `.pdf`) into the vector store.
+
+**Request body** (`multipart/form-data`):
+- `file` — the document file (max 10 MB)
+
+**Response** (`application/json`):
+```json
+{ "source": "notes.txt", "bytes": 4096, "chunks": 12 }
+```
+
+---
+
+#### `POST /api/v1/upload/image`
+
+Upload an image and store it with a text description for retrieval.
+
+**Request body** (`multipart/form-data`):
+- `image` — image file (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`; max 10 MB)
+- `description` — text description to embed and index (required)
+
+**Response** (`application/json`):
+```json
+{
+  "source": "1718123456789-photo.jpg",
+  "image_path": "/images/1718123456789-photo.jpg",
+  "description": "A diagram showing the architecture",
+  "bytes": 204800,
+  "chunks": 1
+}
+```
+
+---
+
+#### `POST /api/v1/caption`
+
+Generate a text description for an image using the vision model.
+Only available when the configured model supports vision.
+
+**Request body** (`multipart/form-data`):
+- `image` — image file (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`; max 10 MB)
+
+**Response** (`application/json`):
+```json
+{ "description": "A screenshot of a terminal showing Go test output." }
+```
+
+---
+
+### Error responses
+
+All endpoints return standard HTTP status codes:
+
+| Code | Meaning |
+|---|---|
+| `400` | Bad request — malformed body, missing required field, or empty file |
+| `401` | Unauthorized — missing or invalid Bearer token |
+| `415` | Unsupported Media Type — file format not accepted |
+| `429` | Too Many Requests — per-IP rate limit exceeded (default: 100 req/min) |
+| `502` | Bad Gateway — LLM or caption service error |
+| `503` | Service Unavailable — vector store or DB not reachable |

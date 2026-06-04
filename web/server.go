@@ -47,7 +47,7 @@ type Options struct {
 	ImagesDir        string
 	Logger           *slog.Logger
 	ServerAPIKey     string
-	// RateLimitRequests is the max requests per IP per minute on /api/* routes.
+	// RateLimitRequests is the max requests per IP per minute on /api/v1/* routes.
 	// 0 disables rate limiting.
 	RateLimitRequests int
 }
@@ -83,7 +83,7 @@ func New(client, embedder *llm.Client, retriever *rag.Retriever, opts Options) (
 		lg = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	if opts.ServerAPIKey == "" {
-		lg.Warn("API_KEY not set — authentication disabled; all /api/* routes are open")
+		lg.Warn("API_KEY not set — authentication disabled; all /api/v1/* routes are open")
 	}
 	if opts.RateLimitRequests > 0 {
 		lg.Info("rate limiting enabled", slog.Int("requests_per_minute", opts.RateLimitRequests))
@@ -120,8 +120,8 @@ func (s *Server) Routes() http.Handler {
 	fs := http.FileServer(http.Dir(s.imagesDir))
 	r.Handle("/images/*", http.StripPrefix("/images", fs))
 
-	// All /api/* routes require a valid Bearer token and are rate-limited per IP.
-	r.Route("/api", func(r chi.Router) {
+	// All /api/v1/* routes require a valid Bearer token and are rate-limited per IP.
+	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(requireAuth(s.serverAPIKey))
 		if s.rateLimitRequests > 0 {
 			r.Use(httprate.LimitByIP(s.rateLimitRequests, time.Minute))

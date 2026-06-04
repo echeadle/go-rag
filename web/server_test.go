@@ -76,7 +76,7 @@ func multipartFile(t *testing.T, fieldName, fileName string, content []byte) (*h
 	_, err = fw.Write(content)
 	require.NoError(t, err)
 	require.NoError(t, mw.Close())
-	req := httptest.NewRequest(http.MethodPost, "/api/upload", &buf)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/upload", &buf)
 	return req, mw.FormDataContentType()
 }
 
@@ -225,7 +225,7 @@ func TestHandleUpload_MissingFileField(t *testing.T) {
 	_, _ = fw.Write([]byte("some value"))
 	_ = mw.Close()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/upload", &buf)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/upload", &buf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	rr := httptest.NewRecorder()
 
@@ -251,7 +251,7 @@ func TestHandleChatStream_NoFlusher(t *testing.T) {
 	// noFlusher hides http.Flusher — the handler must detect this and return 500.
 	s := minimalServer(t)
 	body := chatJSON(llm.Message{Role: "user", Content: "hello"})
-	req := httptest.NewRequest(http.MethodPost, "/api/chat/stream", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/chat/stream", body)
 	rec := httptest.NewRecorder()
 	nf := &noFlusher{rec: rec}
 
@@ -262,7 +262,7 @@ func TestHandleChatStream_NoFlusher(t *testing.T) {
 
 func TestHandleChatStream_InvalidJSON(t *testing.T) {
 	s := minimalServer(t)
-	req := httptest.NewRequest(http.MethodPost, "/api/chat/stream", strings.NewReader("{bad json"))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/chat/stream", strings.NewReader("{bad json"))
 	rr := httptest.NewRecorder()
 
 	s.handleChatStream(rr, req)
@@ -272,7 +272,7 @@ func TestHandleChatStream_InvalidJSON(t *testing.T) {
 func TestHandleChatStream_EmptyMessages(t *testing.T) {
 	s := minimalServer(t)
 	body := chatJSON() // no messages
-	req := httptest.NewRequest(http.MethodPost, "/api/chat/stream", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/chat/stream", body)
 	rr := httptest.NewRecorder()
 
 	s.handleChatStream(rr, req)
@@ -286,7 +286,7 @@ func TestHandleChatStream_LastRoleNotUser(t *testing.T) {
 		llm.Message{Role: "user", Content: "hello"},
 		llm.Message{Role: "assistant", Content: "hi there"},
 	)
-	req := httptest.NewRequest(http.MethodPost, "/api/chat/stream", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/chat/stream", body)
 	rr := httptest.NewRecorder()
 
 	s.handleChatStream(rr, req)
@@ -357,7 +357,7 @@ func TestRoutes_APIRequiresAuth(t *testing.T) {
 	s.serverAPIKey = "secret"
 	r := s.Routes()
 
-	for _, path := range []string{"/api/chat/stream", "/api/upload"} {
+	for _, path := range []string{"/api/v1/chat/stream", "/api/v1/upload"} {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("{}"))
 			rr := httptest.NewRecorder()
@@ -378,14 +378,14 @@ func TestRateLimit_BlocksAfterLimit(t *testing.T) {
 
 	// First `limit` requests must not be rate-limited (status may vary by handler).
 	for i := 0; i < limit; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/api/chat/stream", strings.NewReader("{}"))
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/chat/stream", strings.NewReader("{}"))
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.NotEqual(t, http.StatusTooManyRequests, rr.Code, "request %d should not be rate limited", i+1)
 	}
 
 	// One over the limit must return 429.
-	req := httptest.NewRequest(http.MethodPost, "/api/chat/stream", strings.NewReader("{}"))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/chat/stream", strings.NewReader("{}"))
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusTooManyRequests, rr.Code)
@@ -398,7 +398,7 @@ func TestRateLimit_DisabledWhenZero(t *testing.T) {
 	r := s.Routes()
 
 	for i := 0; i < 10; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/api/chat/stream", strings.NewReader("{}"))
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/chat/stream", strings.NewReader("{}"))
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.NotEqual(t, http.StatusTooManyRequests, rr.Code)

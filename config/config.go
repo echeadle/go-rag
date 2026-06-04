@@ -24,11 +24,11 @@ type Config struct {
 	HTTPAddr    string
 	ImageDir    string
 	VisionModel string
-	// ServerAPIKey guards all /api/* routes. Loaded from API_KEY env var.
+	// ServerAPIKey guards all /api/v1/* routes. Loaded from API_KEY env var.
 	// Distinct from APIKey (OPENAI_API_KEY) — different secret, different purpose.
 	ServerAPIKey string
 
-	// RateLimitRequests is the max requests per IP per minute on /api/* routes.
+	// RateLimitRequests is the max requests per IP per minute on /api/v1/* routes.
 	// 0 disables rate limiting.
 	RateLimitRequests int
 }
