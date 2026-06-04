@@ -110,3 +110,15 @@ type Store interface {
 	// to distinguish "process is up" from "process + DB are up".
 	Ping(ctx context.Context) error
 }
+
+// HybridStore extends Store with keyword+vector hybrid retrieval.
+// Backends that support full-text search implement this interface.
+// The retriever type-asserts for HybridStore and falls back to Query
+// when the assertion fails (e.g. fakeStore in tests).
+type HybridStore interface {
+	Store
+	// HybridQuery combines pgvector cosine similarity with PostgreSQL
+	// full-text keyword search, merging the two result sets via
+	// Reciprocal Rank Fusion (RRF).
+	HybridQuery(ctx context.Context, embedding []float32, query string, topK int) ([]Result, error)
+}

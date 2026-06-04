@@ -161,6 +161,60 @@ func (s *Store) Query(ctx context.Context, embedding []float32, topK int) ([]vec
 	return results, rows.Err()
 }
 
+// keywordQuery runs a full-text search using the documents.tsv column.
+// Returns results ordered by ts_rank descending. Requires migration 002.
+func (s *Store) keywordQuery(ctx context.Context, query string, topK int) ([]vector.Result, error) {
+	if query == "" || topK <= 0 {
+		return nil, nil
+	}
+	const stmt = `
+		SELECT id, content, metadata,
+		       ts_rank(tsv, plainto_tsquery('english', $1)) AS score
+		FROM documents
+		WHERE tsv @@ plainto_tsquery('english', $1)
+		ORDER BY score DESC
+		LIMIT $2
+	`
+	rows, err := s.pool.Query(ctx, stmt, query, topK)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []vector.Result
+	for rows.Next() {
+		var (
+			r       vector.Result
+			metaRaw []byte
+			score   float32
+		)
+		if err := rows.Scan(&r.ID, &r.Content, &metaRaw, &score); err != nil {
+			return nil, err
+		}
+		if err := unmarshalMetadata(metaRaw, &r.Metadata); err != nil {
+			return nil, fmt.Errorf("metadata for %s: %w", r.ID, err)
+		}
+		r.Score = score
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
+// HybridQuery combines vector similarity and full-text keyword search,
+// merging the two result sets via Reciprocal Rank Fusion.
+// The embedding is used for vector retrieval; query drives keyword search.
+func (s *Store) HybridQuery(ctx context.Context, embedding []float32, query string, topK int) ([]vector.Result, error) {
+	vectorHits, err := s.Query(ctx, embedding, topK)
+	if err != nil {
+		return nil, fmt.Errorf("vector: %w", err)
+	}
+	kwHits, err := s.keywordQuery(ctx, query, topK)
+	if err != nil {
+		return nil, fmt.Errorf("keyword: %w", err)
+	}
+	return reciprocalRankFusion(vectorHits, kwHits, topK), nil
+}
+
 func (s *Store) Delete(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
 		return nil

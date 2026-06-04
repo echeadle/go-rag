@@ -86,8 +86,9 @@ func Run(parent context.Context, cfg config.Config) error {
 	var retriever *rag.Retriever
 	if store != nil {
 		retriever = rag.New(embedder, store, rag.Options{
-			TopK:     5,
-			Rewriter: rag.NewRewriter(client),
+			TopK:         5,
+			Rewriter:     rag.NewRewriter(client),
+			HybridSearch: cfg.HybridSearch,
 		})
 	}
 

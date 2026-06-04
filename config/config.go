@@ -36,6 +36,10 @@ type Config struct {
 	// Sentences with adjacent cosine similarity below this value become chunk
 	// boundaries. 0 disables semantic chunking (uses fixed-size chunker).
 	ChunkSemanticThreshold float64
+
+	// HybridSearch enables keyword+vector hybrid retrieval via RRF.
+	// Set HYBRID_SEARCH=false to disable and use pure vector search.
+	HybridSearch bool
 }
 
 func Load() Config {
@@ -59,6 +63,7 @@ func Load() Config {
 		ServerAPIKey:           os.Getenv("API_KEY"),
 		RateLimitRequests:      atoiOr(os.Getenv("RATE_LIMIT_REQUESTS"), 100),
 		ChunkSemanticThreshold: parseFloatOr(os.Getenv("CHUNK_SEMANTIC_THRESHOLD"), 0.75),
+		HybridSearch:           os.Getenv("HYBRID_SEARCH") != "false",
 	}
 
 	if cfg.BaseURL == "" {

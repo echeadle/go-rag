@@ -37,11 +37,35 @@ func runMigrations(ctx context.Context, db *sql.DB, embeddingDim int) error {
 		}},
 	)
 
+	m002 := goose.NewGoMigration(
+		2,
+		&goose.GoFunc{RunTx: func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `
+				ALTER TABLE documents
+				ADD COLUMN IF NOT EXISTS tsv tsvector
+				GENERATED ALWAYS AS (to_tsvector('english', content)) STORED`)
+			if err != nil {
+				return err
+			}
+			_, err = tx.ExecContext(ctx, `
+				CREATE INDEX IF NOT EXISTS documents_tsv_idx
+				ON documents USING GIN(tsv)`)
+			return err
+		}},
+		&goose.GoFunc{RunTx: func(ctx context.Context, tx *sql.Tx) error {
+			if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS documents_tsv_idx`); err != nil {
+				return err
+			}
+			_, err := tx.ExecContext(ctx, `ALTER TABLE documents DROP COLUMN IF EXISTS tsv`)
+			return err
+		}},
+	)
+
 	provider, err := goose.NewProvider(
 		goose.DialectPostgres,
 		db,
-		nil, // SQL migrations in db/migrations/ will be added in future items
-		goose.WithGoMigrations(m001),
+		nil,
+		goose.WithGoMigrations(m001, m002),
 	)
 	if err != nil {
 		return fmt.Errorf("migration provider: %w", err)

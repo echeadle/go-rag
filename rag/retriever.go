@@ -12,15 +12,17 @@ import (
 const defaultTopK = 5
 
 type Options struct {
-	TopK int
-	Rewriter *Rewriter
+	TopK         int
+	Rewriter     *Rewriter
+	HybridSearch bool
 }
 
 type Retriever struct {
-	embedder llm.Embedder
-	store vector.Store
-	rewriter *Rewriter
-	topK int
+	embedder     llm.Embedder
+	store        vector.Store
+	rewriter     *Rewriter
+	topK         int
+	hybridSearch bool
 }
 
 func New(embedder llm.Embedder, store vector.Store, opts Options) *Retriever {
@@ -28,11 +30,12 @@ func New(embedder llm.Embedder, store vector.Store, opts Options) *Retriever {
 	if topK <= 0 {
 		topK = defaultTopK
 	}
-	return &Retriever {
-		embedder: embedder,
-		store: store,
-		rewriter: opts.Rewriter,
-		topK: topK,
+	return &Retriever{
+		embedder:     embedder,
+		store:        store,
+		rewriter:     opts.Rewriter,
+		topK:         topK,
+		hybridSearch: opts.HybridSearch,
 	}
 }
 
@@ -55,11 +58,23 @@ func (r *Retriever) Retrieve(ctx context.Context, history []llm.Message) (string
 		return "", nil
 	}
 
-	//get this hits 
-	hits, err := r.store.Query(ctx, vecs[0], r.topK)
+	// Hybrid search uses the raw user message for the keyword path so that
+	// plainto_tsquery receives natural terms, not a potentially verbose rewrite.
+	// The vector path keeps the rewritten query for better semantic coverage.
+	var hits []vector.Result
+	if r.hybridSearch {
+		if hs, ok := r.store.(vector.HybridStore); ok {
+			rawQuery := lastUserMessage(history)
+			hits, err = hs.HybridQuery(ctx, vecs[0], rawQuery, r.topK)
+		} else {
+			hits, err = r.store.Query(ctx, vecs[0], r.topK)
+		}
+	} else {
+		hits, err = r.store.Query(ctx, vecs[0], r.topK)
+	}
 	if err != nil {
-		return "", fmt.Errorf("vector query: %w", err)
-	}	
+		return "", fmt.Errorf("query: %w", err)
+	}
 	if len(hits) == 0 {
 		return "", nil
 	}
