@@ -81,7 +81,7 @@ func TestProcessContent_NilStore(t *testing.T) {
 }
 
 func TestProcessContent_UnsupportedFormat(t *testing.T) {
-	_, err := ProcessContent(context.Background(), "doc.pdf", []byte("hello"), Options{}, fakeEmbedder{dim: 4}, &fakeStore{})
+	_, err := ProcessContent(context.Background(), "doc.docx", []byte("hello"), Options{}, fakeEmbedder{dim: 4}, &fakeStore{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported")
 }

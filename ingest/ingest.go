@@ -62,9 +62,18 @@ func ProcessContent(ctx context.Context, source string, content []byte, opts Opt
 		overlap = defaultChunkOverlap
 	}
 
-	text := strings.TrimSpace(string(content))
-	if text == "" {
-		return 0, errors.New("file is empty")
+	var text string
+	if strings.ToLower(filepath.Ext(base)) == ".pdf" {
+		extracted, err := extractPDF(content)
+		if err != nil {
+			return 0, err
+		}
+		text = extracted
+	} else {
+		text = strings.TrimSpace(string(content))
+		if text == "" {
+			return 0, errors.New("file is empty")
+		}
 	}
 
 	chunks := chunk(text, size, overlap)
@@ -115,7 +124,7 @@ func IsSupported(name string) bool {
 
 func supportedFormat(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
-	case ".txt", ".md", ".markdown":
+	case ".txt", ".md", ".markdown", ".pdf":
 		return true
 	}
 	return false

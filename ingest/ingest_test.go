@@ -18,7 +18,7 @@ func TestIsSupported(t *testing.T) {
 		{"txt uppercase", "DOC.TXT", true},
 		{"md uppercase", "NOTES.MD", true},
 		{"path with dir", "/some/path/file.txt", true},
-		{"pdf unsupported", "file.pdf", false},
+		{"pdf supported", "file.pdf", true},
 		{"png unsupported", "image.png", false},
 		{"docx unsupported", "report.docx", false},
 		{"no extension", "noextension", false},

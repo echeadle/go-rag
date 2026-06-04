@@ -237,7 +237,7 @@ func TestHandleUpload_UnsupportedFormat(t *testing.T) {
 	s := minimalServer(t)
 	s.store = fakeWebStore{}
 
-	req, ct := multipartFile(t, "file", "report.pdf", []byte("%PDF-1.4"))
+	req, ct := multipartFile(t, "file", "report.docx", []byte("PK\x03\x04"))
 	req.Header.Set("Content-Type", ct)
 	rr := httptest.NewRecorder()
 
