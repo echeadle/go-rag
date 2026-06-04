@@ -55,10 +55,9 @@ services:
       # Binding to 127.0.0.1 (the local-dev default) would make the port
       # unreachable even though it's published below.
       HTTP_ADDR: :8080
-      # Replace localhost with host.docker.internal so the container can reach
-      # Ollama (or any other service) running on the host machine.
-      # The .env file uses localhost, which only works outside the container.
-      OPENAI_BASE_URL: http://host.docker.internal:11434/v1
+      # Set to the OpenAI API. To use a local Ollama model instead, change
+      # this to http://host.docker.internal:11434/v1 and update OPENAI_MODEL.
+      OPENAI_BASE_URL: https://api.openai.com/v1
       EMBEDDING_BASE_URL: http://host.docker.internal:11434/v1
       # Pin to the container-relative path regardless of what .env has.
       # The prompts dir is copied into the image at /app/prompts.
