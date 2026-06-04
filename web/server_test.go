@@ -416,4 +416,8 @@ func TestHandleChatPage_OK(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Header().Get("Content-Type"), "text/html")
 	assert.Contains(t, rr.Body.String(), "Test") // page title set in minimalServer
+
+	csp := rr.Header().Get("Content-Security-Policy")
+	assert.Contains(t, csp, "nonce-", "CSP header must include a per-request nonce")
+	assert.Contains(t, csp, "frame-ancestors 'none'", "CSP header must include frame-ancestors")
 }

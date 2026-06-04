@@ -136,7 +136,7 @@
     </form>
   </dialog>
 
-<script>
+<script nonce="{{.Nonce}}">
   const log = document.getElementById("log");
   const form = document.getElementById("form");
   const input = document.getElementById("input");
@@ -314,14 +314,16 @@
         const res = await fetch("/api/v1/caption", { method: "POST", headers: authHeaders(), body });
         if (!res.ok) {
           const err = (await res.text()).trim();
-          alert("Caption failed: " + (err || res.statusText));
+          imageDialog.close();
+          renderNotice("Caption failed: " + (err || res.statusText), "error");
           return;
         }
         const data = await res.json();
         imageDescription.value = data.description || "";
         imageDescription.focus();
       } catch (err) {
-        alert("Caption failed: " + err);
+        imageDialog.close();
+        renderNotice("Caption failed: " + err, "error");
       } finally {
         autoCaption.disabled = false;
         autoCaption.textContent = original;
@@ -334,6 +336,12 @@
     const file = imageFile.files && imageFile.files[0];
     const description = imageDescription.value.trim();
     if (!file || !description) return;
+
+    const imgExt = file.name.split(".").pop().toLowerCase();
+    if (!["png", "jpg", "jpeg", "webp", "gif"].includes(imgExt)) {
+      renderNotice(`❌ ${file.name}: unsupported format (allowed: .png, .jpg, .jpeg, .webp, .gif)`, "error");
+      return;
+    }
 
     imageSubmit.disabled = true;
     const notice = renderNotice(`Uploading ${file.name}…`, "info");
@@ -374,6 +382,12 @@
     if (!file) return;
     // Reset so picking the same file twice still fires "change".
     fileInput.value = "";
+
+    const docExt = file.name.split(".").pop().toLowerCase();
+    if (!["txt", "md", "markdown", "pdf"].includes(docExt)) {
+      renderNotice(`❌ ${file.name}: unsupported format (allowed: .txt, .md, .markdown, .pdf)`, "error");
+      return;
+    }
 
     const notice = renderNotice(`Uploading ${file.name}…`, "info");
     attach.disabled = true;

@@ -2,8 +2,10 @@ package web
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -446,13 +448,34 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleChatPage(w http.ResponseWriter, r *http.Request) {
+	nonce := cspNonce()
+	csp := fmt.Sprintf(
+		"default-src 'self'; "+
+			"script-src 'nonce-%s' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; "+
+			"style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "+
+			"connect-src 'self'; "+
+			"img-src 'self' data:; "+
+			"form-action 'self'; "+
+			"frame-ancestors 'none'",
+		nonce,
+	)
+	w.Header().Set("Content-Security-Policy", csp)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tpl.ExecuteTemplate(w, "chat.gohtml", map[string]any{
 		"Title":          s.title,
 		"CaptionEnabled": s.client.HasVision(),
+		"Nonce":          nonce,
 	}); err != nil {
 		s.logger.Error("template error", slog.Any("error", err))
 	}
+}
+
+func cspNonce() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(b)
 }
 
 // requireAuth returns middleware that checks for a valid Bearer token.
