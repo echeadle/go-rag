@@ -114,6 +114,7 @@ func ProcessContent(ctx context.Context, source string, content []byte, opts Opt
 		return 0, err
 	}
 
+	ingestChunksTotal.Add(float64(len(chunks)))
 	return len(chunks), nil
 
 }

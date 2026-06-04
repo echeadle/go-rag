@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/openai/openai-go/v3"
 )
@@ -15,6 +16,8 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 	if len(texts) == 0 {
 		return nil, nil
 	}
+	t := time.Now()
+	defer func() { llmLatency.WithLabelValues("embed").Observe(time.Since(t).Seconds()) }()
 
 	resp, err := c.sdk.Embeddings.New(ctx, openai.EmbeddingNewParams{
 		Model: c.cfg.EmbeddingModel,

@@ -98,6 +98,9 @@ func newClient(cfg config.Config, baseURL, apiKey string) *Client {
 }
 
 func (c *Client) ChatStream(ctx context.Context, messages []Message, onDelta func(string)) (Message, error) {
+	t := time.Now()
+	defer func() { llmLatency.WithLabelValues("chat").Observe(time.Since(t).Seconds()) }()
+
 	stream := c.sdk.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
 		Model:    c.cfg.Model,
 		Messages: toSDKMessages(messages),

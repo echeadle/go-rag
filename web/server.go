@@ -24,6 +24,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 //go:embed templates/*.gohtml
@@ -112,6 +113,7 @@ func (s *Server) Routes() http.Handler {
 
 	// Open routes — no auth required.
 	r.Get("/healthz", s.handleHealthz)
+	r.Handle("/metrics", promhttp.Handler())
 	r.Get("/chat", s.handleChatPage)
 
 	// /images/* must stay open: <img src> tags cannot send Authorization headers.
@@ -484,12 +486,26 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			start := time.Now()
 			next.ServeHTTP(ww, r)
+
+			// Skip high-frequency scrape/health routes to avoid log spam.
+			if r.URL.Path == "/metrics" || r.URL.Path == "/healthz" {
+				return
+			}
+
+			// Use chi's resolved route pattern to avoid unbounded label cardinality
+			// (e.g. /images/* must not become one series per filename).
+			pattern := chi.RouteContext(r.Context()).RoutePattern()
+			if pattern == "" {
+				pattern = r.URL.Path
+			}
+
 			logger.Info("request",
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
 				slog.Int("status", ww.Status()),
 				slog.Duration("duration", time.Since(start)),
 			)
+			requestsTotal.WithLabelValues(pattern, fmt.Sprintf("%d", ww.Status())).Inc()
 		})
 	}
 }

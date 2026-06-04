@@ -3,6 +3,8 @@ package rag
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"go-rag/llm"
 	"go-rag/vector"
 )
@@ -35,7 +37,10 @@ func New(embedder llm.Embedder, store vector.Store, opts Options) *Retriever {
 }
 
 func (r *Retriever) Retrieve(ctx context.Context, history []llm.Message) (string, error) {
-	// build query 
+	t := time.Now()
+	defer func() { retrievalLatency.Observe(time.Since(t).Seconds()) }()
+
+	// build query
 	query := r.buildQuery(ctx, history)
 	if query == "" {
 		return "", nil
