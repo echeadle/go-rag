@@ -62,8 +62,9 @@ func Run(parent context.Context, cfg config.Config) error {
 		go func() {
 			defer wg.Done()
 			opts := ingest.Options{
-				SourceDir:    cfg.IngestDir,
-				ProcessedDir: cfg.ProcessedDir,
+				SourceDir:         cfg.IngestDir,
+				ProcessedDir:      cfg.ProcessedDir,
+				SemanticThreshold: cfg.ChunkSemanticThreshold,
 			}
 			if err := ingest.Watch(ctx, opts, embedder, store, ingestLogger); err != nil && ctx.Err() == nil {
 				logger.Error("watcher stopped", slog.Any("error", err))
@@ -92,14 +93,15 @@ func Run(parent context.Context, cfg config.Config) error {
 
 	if cfg.HTTPAddr != "" {
 		srv, err := web.New(client, embedder, retriever, web.Options{
-			Addr:             cfg.HTTPAddr,
-			SystemPromptFile: cfg.SystemPromptFile,
-			Store:            store,
-			ProcessedDir:     cfg.ProcessedDir,
-			ImagesDir:        cfg.ImageDir,
-			Logger:            logger.With(slog.String("component", "web")),
-			ServerAPIKey:      cfg.ServerAPIKey,
-			RateLimitRequests: cfg.RateLimitRequests,
+			Addr:                   cfg.HTTPAddr,
+			SystemPromptFile:       cfg.SystemPromptFile,
+			Store:                  store,
+			ProcessedDir:           cfg.ProcessedDir,
+			ImagesDir:              cfg.ImageDir,
+			Logger:                 logger.With(slog.String("component", "web")),
+			ServerAPIKey:           cfg.ServerAPIKey,
+			RateLimitRequests:      cfg.RateLimitRequests,
+			ChunkSemanticThreshold: cfg.ChunkSemanticThreshold,
 		})
 		if err != nil {
 			logger.Error("web server disabled", slog.Any("error", err))

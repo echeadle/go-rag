@@ -31,6 +31,11 @@ type Config struct {
 	// RateLimitRequests is the max requests per IP per minute on /api/v1/* routes.
 	// 0 disables rate limiting.
 	RateLimitRequests int
+
+	// ChunkSemanticThreshold enables semantic chunking when > 0.
+	// Sentences with adjacent cosine similarity below this value become chunk
+	// boundaries. 0 disables semantic chunking (uses fixed-size chunker).
+	ChunkSemanticThreshold float64
 }
 
 func Load() Config {
@@ -51,8 +56,9 @@ func Load() Config {
 		HTTPAddr:         os.Getenv("HTTP_ADDR"),
 		ImageDir:         os.Getenv("IMAGES_DIR"),
 		VisionModel:      os.Getenv("VISION_MODEL"),
-		ServerAPIKey:      os.Getenv("API_KEY"),
-		RateLimitRequests: atoiOr(os.Getenv("RATE_LIMIT_REQUESTS"), 100),
+		ServerAPIKey:           os.Getenv("API_KEY"),
+		RateLimitRequests:      atoiOr(os.Getenv("RATE_LIMIT_REQUESTS"), 100),
+		ChunkSemanticThreshold: parseFloatOr(os.Getenv("CHUNK_SEMANTIC_THRESHOLD"), 0.75),
 	}
 
 	if cfg.BaseURL == "" {
@@ -112,4 +118,15 @@ func atoiOr(s string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+func parseFloatOr(s string, fallback float64) float64 {
+	if s == "" {
+		return fallback
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return fallback
+	}
+	return f
 }

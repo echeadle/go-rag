@@ -21,8 +21,12 @@ const (
 type Options struct {
 	SourceDir    string
 	ProcessedDir string
-	ChunkSize   int
+	ChunkSize    int
 	ChunkOverlap int
+	// SemanticThreshold enables semantic chunking when > 0.
+	// Sentences whose adjacent cosine similarity falls below this value
+	// become chunk boundaries. 0 uses the fixed-size chunker.
+	SemanticThreshold float64
 }
 
 func processOne(ctx context.Context, path string, opts Options, embedder llm.Embedder, store vector.Store) error {
@@ -76,7 +80,16 @@ func ProcessContent(ctx context.Context, source string, content []byte, opts Opt
 		}
 	}
 
-	chunks := chunk(text, size, overlap)
+	var chunks []string
+	if opts.SemanticThreshold > 0 {
+		sc, semErr := chunkSemantic(ctx, text, opts.SemanticThreshold, embedder)
+		if semErr == nil && len(sc) > 0 {
+			chunks = sc
+		}
+	}
+	if len(chunks) == 0 {
+		chunks = chunk(text, size, overlap)
+	}
 	if len(chunks) == 0 {
 		return 0, errors.New("no chunks produced")
 	}

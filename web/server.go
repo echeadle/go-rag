@@ -52,6 +52,9 @@ type Options struct {
 	// RateLimitRequests is the max requests per IP per minute on /api/v1/* routes.
 	// 0 disables rate limiting.
 	RateLimitRequests int
+	// ChunkSemanticThreshold is forwarded to ingest.Options for document uploads.
+	// 0 disables semantic chunking (uses fixed-size chunker).
+	ChunkSemanticThreshold float64
 }
 
 type Server struct {
@@ -64,9 +67,10 @@ type Server struct {
 	tpl          *template.Template
 	system       string
 	title        string
-	logger            *slog.Logger
-	serverAPIKey      string
-	rateLimitRequests int
+	logger                 *slog.Logger
+	serverAPIKey           string
+	rateLimitRequests      int
+	chunkSemanticThreshold float64
 }
 
 func New(client, embedder *llm.Client, retriever *rag.Retriever, opts Options) (*Server, error) {
@@ -102,9 +106,10 @@ func New(client, embedder *llm.Client, retriever *rag.Retriever, opts Options) (
 		tpl:          tpl,
 		system:       readSystemPrompt(opts.SystemPromptFile),
 		title:        title,
-		logger:            lg,
-		serverAPIKey:      opts.ServerAPIKey,
-		rateLimitRequests: opts.RateLimitRequests,
+		logger:                 lg,
+		serverAPIKey:           opts.ServerAPIKey,
+		rateLimitRequests:      opts.RateLimitRequests,
+		chunkSemanticThreshold: opts.ChunkSemanticThreshold,
 	}, nil
 }
 
@@ -327,7 +332,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chunks, err := ingest.ProcessContent(r.Context(), name, content, ingest.Options{}, s.embedder, s.store)
+	chunks, err := ingest.ProcessContent(r.Context(), name, content, ingest.Options{SemanticThreshold: s.chunkSemanticThreshold}, s.embedder, s.store)
 	if err != nil {
 		s.logger.Error("upload ingest failed", slog.String("file", name), slog.Any("error", err))
 		http.Error(w, "ingest failed: "+err.Error(), http.StatusInternalServerError)
