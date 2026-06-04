@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pgvector/pgvector-go"
 	pgxvec "github.com/pgvector/pgvector-go/pgx"
 
@@ -50,11 +51,14 @@ func New(ctx context.Context, opts Options)(*Store, error) {
 		return nil, fmt.Errorf("connect: %w", err)
 	}
 
-	s := &Store{pool: pool}
-	if err := s.migrate(ctx, opts.EmbeddingDim); err != nil {
+	sqlDB := stdlib.OpenDB(*cfg.ConnConfig)
+	defer sqlDB.Close()
+	if err := runMigrations(ctx, sqlDB, opts.EmbeddingDim); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+
+	s := &Store{pool: pool}
 
 	return s, nil
 }
@@ -69,36 +73,6 @@ func ensureExtension(ctx context.Context, dsn string) error {
 	return err
 }
 
-func (s *Store) migrate(ctx context.Context, dim int) error {
-	stmts := []string {
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS documents (
-    	id TEXT PRIMARY KEY,
-    	content text NOT NULL,
-    	metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-    	embedding vector(%d) NOT NULL,
-    	created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-)`, dim),
-		`CREATE INDEX IF NOT EXISTS documents_embedding_idx
-			ON documents USING hnsw (embedding vector_cosine_ops)`,
-	}
-
-	for _, q := range stmts {
-		if _, err := s.pool.Exec(ctx, q); err != nil {
-			return fmt.Errorf("exec %q: %w", firstLine(q), err)
-		}
-	}
-
-	return nil
-}
-
-func firstLine(s string) string {
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			return s[:i]
-		}
-	}
-	return s
-}
 
 func (s *Store) Upsert(ctx context.Context, docs []vector.Document) error {
 	if  len(docs) == 0 {
